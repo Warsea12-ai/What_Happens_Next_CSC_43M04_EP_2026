@@ -1,0 +1,15 @@
+# Main Hydra config: composes model, data, train, and experiment bundle.
+# Run from `src/`:  python train.py experiment=cnn_lstm
+defaults:
+  - model: cnn_baseline
+  - data: default
+  - train: default
+  - experiment: baseline_from_scratch
+  - _self_
+
+# Optional: where Hydra stores run outputs (checkpoints printed in train.py)
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d_%H-%M-%S}
+
+num_classes: 33

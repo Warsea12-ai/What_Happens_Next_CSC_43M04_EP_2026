@@ -1,0 +1,7 @@
+# @package _global_
+# ResNet18 per frame + LSTM over time
+model:
+  name: cnn_lstm
+  pretrained: true
+  num_classes: ${num_classes}
+  lstm_hidden_size: 128
