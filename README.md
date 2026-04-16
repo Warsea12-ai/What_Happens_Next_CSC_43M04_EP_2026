@@ -6,7 +6,7 @@ The codebase allows to train a **video classifier** on folders of extracted fram
 
 ## Getting the data
 
-1. Download the prepared dataset from Google Drive: **[add your link here]**.
+1. Download the prepared dataset from Google Drive: [frames.zip](https://drive.google.com/file/d/1h2tliUjXkpmuRIoJkUdv9Qz-zTdIkf1F/view?usp=sharing).
 2. Unzip it so that you have a `processed_data` folder at the **root of this project** (next to `src/`), with at least:
    - `processed_data/train/` — class subfolders, each containing `video_<id>/frame_*.jpg`
    - `processed_data/val/` — same layout for validation
