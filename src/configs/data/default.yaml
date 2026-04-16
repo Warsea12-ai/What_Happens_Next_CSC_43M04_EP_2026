@@ -1,0 +1,14 @@
+# @package _global_
+dataset:
+  # Train split: used by train.py with split_train_val (hold-out val for training curves).
+  train_dir: ${hydra:runtime.cwd}/processed_data/val2/train
+  # Full validation split: used by evaluate.py (no random split; entire folder).
+  val_dir: ${hydra:runtime.cwd}/processed_data/val2/val
+  # Test frames root for create_submission.py
+  test_dir: ${hydra:runtime.cwd}/processed_data/val2/test
+  submission_output: ${hydra:runtime.cwd}/processed_data/val2/submission.csv
+
+  num_frames: 8
+  val_ratio: 0.2
+  seed: 42
+  max_samples: null
