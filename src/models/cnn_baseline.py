@@ -54,3 +54,108 @@ class CNNBaseline(nn.Module):
         # Class scores: (B, num_classes)
         logits = self.classifier(pooled_features)
         return logits
+
+import torch
+import torch.nn as nn
+from supplement/.blocks import R2Plus1DBlock, SEBlock3D
+from supplement/.temporal_transformer import TemporalTransformer
+
+class HybridR2Plus1DTransformer(nn.Module):
+    """
+    Modèle hybride pour Track A :
+    - Stem : conv (2+1)D initiale
+    - 4 stages de blocs R(2+1)D (comme un ResNet-18 video)
+    - SE attention
+    - Transformer temporel
+    - Classification
+    """
+    def __init__(self, num_classes=33, num_frames=16, dropout=0.5):
+        super().__init__()
+        
+        # Stem : capture les basses fréquences spatio-temporelles
+        self.stem = nn.Sequential(
+            nn.Conv3d(3, 45, kernel_size=(1, 7, 7), stride=(1, 2, 2), 
+                      padding=(0, 3, 3), bias=False),
+            nn.BatchNorm3d(45),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(45, 64, kernel_size=(3, 1, 1), stride=(1, 1, 1), 
+                      padding=(1, 0, 0), bias=False),
+            nn.BatchNorm3d(64),
+            nn.ReLU(inplace=True),
+        )
+        
+        # 4 stages à la ResNet
+        self.stage1 = self._make_stage(64, 64, blocks=2, stride=1)
+        self.stage2 = self._make_stage(64, 128, blocks=2, stride=2)
+        self.stage3 = self._make_stage(128, 256, blocks=2, stride=2)
+        self.stage4 = self._make_stage(256, 512, blocks=2, stride=2)
+        
+        # Attention canal
+        self.se = SEBlock3D(512, reduction=16)
+        
+        # Pooling spatial -> on garde la dimension temporelle
+        self.spatial_pool = nn.AdaptiveAvgPool3d((None, 1, 1))
+        
+        # Transformer temporel
+        self.temporal_transformer = TemporalTransformer(
+            d_model=512,
+            nhead=8,
+            num_layers=4,
+            dim_feedforward=1024,
+            dropout=0.1,
+        )
+        
+        # Classifier
+        self.classifier = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(512, 256),
+            nn.GELU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(256, num_classes)
+        )
+        
+        self._init_weights()
+    
+    def _make_stage(self, in_ch, out_ch, blocks, stride):
+        downsample = None
+        if stride != 1 or in_ch != out_ch:
+            downsample = nn.Sequential(
+                nn.Conv3d(in_ch, out_ch, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm3d(out_ch),
+            )
+        
+        layers = [R2Plus1DBlock(in_ch, out_ch, stride=stride, downsample=downsample)]
+        for _ in range(1, blocks):
+            layers.append(R2Plus1DBlock(out_ch, out_ch))
+        return nn.Sequential(*layers)
+    
+    def _init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm3d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=0.02)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+    
+    def forward(self, x):
+        # x: (B, C, T, H, W)
+        x = self.stem(x)
+        x = self.stage1(x)
+        x = self.stage2(x)
+        x = self.stage3(x)
+        x = self.stage4(x)
+        x = self.se(x)
+        
+        # Pool spatial uniquement : (B, 512, T, 1, 1) -> (B, T, 512)
+        x = self.spatial_pool(x)
+        x = x.squeeze(-1).squeeze(-1).permute(0, 2, 1)
+        
+        # Transformer temporel
+        x = self.temporal_transformer(x)  # (B, 512)
+        
+        # Classification
+        return self.classifier(x)
