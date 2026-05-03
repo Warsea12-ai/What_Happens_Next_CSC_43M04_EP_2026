@@ -1,4 +1,4 @@
-name: EarlyVit
+name: R2Plus1D
 pretrained: False 
 num_classes: ${num_classes}
 # your hyperparameters
