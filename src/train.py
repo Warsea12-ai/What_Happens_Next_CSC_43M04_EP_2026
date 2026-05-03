@@ -45,6 +45,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pretrained=pretrained,
             lstm_hidden_size=int(hidden),
         )
+    if name == "EarlyVit":
+        return EarlyViT()
 
     raise ValueError(f"Unknown model.name: {name}")
 
