@@ -27,7 +27,10 @@ from torch.utils.data import DataLoader
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
+from models.EarlyVit import EarlyVit
+from models.R2Plus1D import R2Plus1D 
 from utils import build_transforms, set_seed, split_train_val
+from torchvision.models.video import mvit_v1_b
 
 
 def build_model(cfg: DictConfig) -> nn.Module:
@@ -45,8 +48,18 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pretrained=pretrained,
             lstm_hidden_size=int(hidden),
         )
+   
+   
     if name == "EarlyVit":
-        return EarlyViT()
+        return EarlyVit(
+            num_classes=cfg.model.num_classes,
+            # autres hyperparamètres si tu en mets dans le yaml
+        )
+    
+    if name == "R2Plus1D":
+        return R2Plus1D(
+            num_classes=num_classes
+        )
 
     raise ValueError(f"Unknown model.name: {name}")
 
@@ -82,6 +95,7 @@ def train_one_epoch(
 
     average_loss = running_loss / max(total, 1)
     accuracy = correct / max(total, 1)
+    print(f"  Train loss: {average_loss:.4f}, accuracy: {accuracy:.4f}")
     return average_loss, accuracy
 
 

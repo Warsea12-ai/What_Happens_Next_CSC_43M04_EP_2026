@@ -2,28 +2,19 @@
 Early-ViT — Early Action Recognition with Action Prototypes
 Camporese, Bergamo, Lin, Tighe, Modolo (AWS AI Labs), ECCV 2024
 arXiv:2312.06598
- 
-Implémentation fidèle de la Section 3 du papier :
-    - Encodeur visuel par clip (ex: MViT-B) + projection linéaire vers D
-    - Decodeur transformer causal (T-Dec-B = 6 blocs encoder avec masque causal)
-    - Tête de classification linéaire appliquée à chaque token z(t)
-    - Banque de prototypes (K x D) apprenables, une par classe
-    - Prédicteur de prototype futur f(·) (MLP)
-    - Pertes : L_dyn (= L_ol si e<=e* sinon L_all) + L_proto + L_reg
+
+Variante "encoder image" : 1 frame par segment, donc chaque frame du
+dataloader est un segment t. Format des entrées : (B, T, C, H, W).
 """
- 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models.video import mvit_b_16
- 
- 
+from torchvision.models import vit_b_16
+
+
 class CausalTransformerDecoder(nn.Module):
-    """
-    T-Dec-B du papier : 6 blocs Transformer-encoder standards (Vaswani et al.)
-    avec un masque causal dans la self-attention pour empêcher chaque token
-    d'observer les segments futurs.
-    """
+    """T-Dec-B du papier : 6 blocs Transformer-encoder avec masque causal."""
     def __init__(self, d_model=256, nhead=8, num_layers=6,
                  dim_feedforward=1024, dropout=0.1, max_len=32):
         super().__init__()
@@ -33,51 +24,32 @@ class CausalTransformerDecoder(nn.Module):
             activation="gelu", batch_first=True, norm_first=True,
         )
         self.layers = nn.TransformerEncoder(layer, num_layers=num_layers)
-        # Positional embeddings apprenables, ajoutés à z_enc avant le decodeur
         self.pos_emb = nn.Parameter(torch.zeros(1, max_len, d_model))
         nn.init.trunc_normal_(self.pos_emb, std=0.02)
- 
+
     @staticmethod
     def _causal_mask(T, device):
-        # mask[i, j] = -inf si j > i (interdit d'attendre dans le futur)
         return torch.triu(
             torch.full((T, T), float("-inf"), device=device), diagonal=1
         )
- 
+
     def forward(self, z_enc):
         # z_enc : (B, T, D)
         B, T, _ = z_enc.shape
         x = z_enc + self.pos_emb[:, :T]
         mask = self._causal_mask(T, z_enc.device)
-        return self.layers(x, mask=mask, is_causal=True)  # (B, T, D)
- 
- 
-class EarlyViT(nn.Module):
+        return self.layers(x, mask=mask, is_causal=True)
+
+
+class EarlyVit(nn.Module):
     """
-    Early-ViT, fidèle à la Fig. 2 et Sec. 3 du papier.
- 
-    Args
-    ----
-    encoder : nn.Module
-        Backbone vidéo qui prend un clip (B, C, F_c, H, W) et renvoie
-        un vecteur (B, D_enc). Le papier utilise MViT-B-16x4. Pour le
-        Track A "from scratch", remplace par un MViT-S/B sans poids
-        pré-entraînés.
-    num_classes : int
-        K classes d'action (33 pour le challenge "What happens next").
-    d_enc : int
-        Dimension de sortie du backbone (768 pour MViT-B).
-    d_model : int
-        Dimension interne du décodeur et des prototypes (paper: 256).
-    num_decoder_layers : int
-        Profondeur du T-Dec-B (paper: 6).
-    label_smoothing : float
-        Le papier mentionne "we do apply label smoothing".
+    Early-ViT — version "encodeur image".
+    Chaque segment t est UNE frame, encodée par un ViT_b_16 from-scratch.
+    Entrées : (B, T, C, H, W).
     """
- 
+
     def __init__(
         self,
-        encoder: mvit_b_16(weights=None),
         num_classes: int,
         d_enc: int = 768,
         d_model: int = 256,
@@ -87,36 +59,34 @@ class EarlyViT(nn.Module):
         dropout: float = 0.1,
         max_segments: int = 32,
         label_smoothing: float = 0.1,
+        pretrained: bool = False,    # gardé pour compat config mais non utilisé
     ):
         super().__init__()
         self.K = num_classes
         self.D = d_model
         self.label_smoothing = label_smoothing
- 
-        # ---- Encodeur visuel partagé (appliqué clip par clip) -----
+
+        # ---- Encodeur ViT image, from-scratch ----
+        encoder = vit_b_16(weights=None)
         self.encoder = encoder
-        # Projection linéaire vers la dimension du décodeur (Eq. après Sec. 3.1)
+
+        # Projection vers la dimension du décodeur
         self.proj = nn.Linear(d_enc, d_model)
- 
-        # ---- Décodeur causal T-Dec-B ----------------------------
+
+        # Décodeur causal T-Dec-B
         self.decoder = CausalTransformerDecoder(
             d_model=d_model, nhead=nhead, num_layers=num_decoder_layers,
             dim_feedforward=dim_feedforward, dropout=dropout,
             max_len=max_segments,
         )
- 
-        # ---- Tête de classification linéaire (Eq. 1) -------------
+
+        # Tête de classification (Eq. 1)
         self.classifier = nn.Linear(d_model, num_classes)
- 
-        # ---- Banque de prototypes P ∈ R^(K × D) ------------------
-        # "Each prototype... is a 256-dim embedding vector randomly
-        # initialized before training."
+
+        # Banque de prototypes P ∈ R^(K × D)
         self.prototypes = nn.Parameter(torch.randn(num_classes, d_model) * 0.02)
- 
-        # ---- Future Proto Predictor f(·) — MLP --------------------
-        # "The feature predictive module is implemented as a multi-layer
-        # perceptron that processes the decoder feature vectors at each
-        # partial observation independently."
+
+        # Future Proto Predictor f(·) — MLP
         self.future_proto_predictor = nn.Sequential(
             nn.Linear(d_model, d_model),
             nn.GELU(),
@@ -124,66 +94,54 @@ class EarlyViT(nn.Module):
             nn.GELU(),
             nn.Linear(d_model, d_model),
         )
- 
-    # ------------------------------------------------------------------
-    # Encodage clip-par-clip : la grosse astuce pour l'inférence en ligne
-    # ------------------------------------------------------------------
+
     def encode_clips(self, clips: torch.Tensor) -> torch.Tensor:
         """
-        clips : (B, T, C, F_c, H, W)  — T clips par vidéo
-        retourne z_enc : (B, T, D)
+        clips : (B, T, C, H, W) — T frames par vidéo
+        retourne : (B, T, D)
         """
-        B, T, C, Fc, H, W = clips.shape
-        # On replie la dim T dans la dim batch pour passer T*B clips
-        # indépendants dans l'encodeur.
-        x = clips.reshape(B * T, C, Fc, H, W)
-        feats = self.encoder(x)             # (B*T, D_enc)
-        feats = self.proj(feats)            # (B*T, D)
-        return feats.reshape(B, T, self.D)  # (B, T, D)
- 
-    # ------------------------------------------------------------------
-    # Forward : utilisé en entraînement (toute la séquence d'un coup)
-    # ------------------------------------------------------------------
+        B, T, C, H, W = clips.shape
+        x = clips.reshape(B * T, C, H, W)    # (B*T, 3, 224, 224)
+        feats = self.encoder(x)              # (B*T, 768)
+        feats = self.proj(feats)             # (B*T, 256)
+        return feats.reshape(B, T, self.D)   # (B, T, 256)
+
     def forward(self, clips: torch.Tensor):
         """
-        clips : (B, T, C, F_c, H, W)
-        Renvoie un dict avec les sorties intermédiaires nécessaires aux
-        trois pertes du papier.
+        clips : (B, T, C, H, W)
+        Renvoie directement les logits (B, K) — prédiction au dernier segment,
+        compatible avec CrossEntropyLoss standard.
+        
+        Les sorties intermédiaires (z, z_last) sont stockées dans self._cache
+        si tu en as besoin plus tard pour les pertes prototypes.
         """
         z_enc = self.encode_clips(clips)            # (B, T, D)
         z = self.decoder(z_enc)                     # (B, T, D)
-        logits = self.classifier(z)                 # (B, T, K)  — Eq. 1
-        return {
-            "logits": logits,        # ŷ(t) pour tout t ∈ [1, T]
-            "z": z,                  # features décodeur (toutes les étapes)
-            "z_last": z[:, -1],      # z(T) — utilisé pour entraîner les prototypes
+        logits_all = self.classifier(z)             # (B, T, K)
+        
+        # On stocke les sorties intermédiaires au cas où (utile pour debug)
+        self._cache = {
+            "logits_all": logits_all,
+            "z": z,
+            "z_last": z[:, -1],
         }
- 
-    # ------------------------------------------------------------------
-    # Inférence en ligne (Sec. 3.1) : on traite un seul nouveau clip
-    # à la fois, sans rejouer les clips précédents.
-    # ------------------------------------------------------------------
+        
+        # Renvoie uniquement les logits au dernier segment : (B, K)
+        return logits_all[:, -1]
+
     @torch.no_grad()
-    def online_step(self, new_clip: torch.Tensor,
-                    cache_z_enc: torch.Tensor = None):
+    def online_step(self, new_frame: torch.Tensor, cache_z_enc=None):
         """
-        new_clip   : (B, C, F_c, H, W)  — le nouveau segment t
-        cache_z_enc: (B, t-1, D) ou None  — features encodées pour les
-                     segments précédents (réutilisées telles quelles).
- 
-        Renvoie (logits_t, cache_mis_a_jour) :
-            logits_t : (B, K)  — prédiction à l'étape t
-            cache    : (B, t, D)
+        new_frame  : (B, C, H, W) — nouvelle frame du segment t
+        cache_z_enc: (B, t-1, D) ou None
         """
-        feats = self.proj(self.encoder(new_clip)).unsqueeze(1)  # (B, 1, D)
+        feats = self.proj(self.encoder(new_frame)).unsqueeze(1)  # (B, 1, D)
         z_enc = feats if cache_z_enc is None else torch.cat(
             [cache_z_enc, feats], dim=1
         )
-        z = self.decoder(z_enc)                  # (B, t, D)
-        logits = self.classifier(z[:, -1])       # (B, K)
+        z = self.decoder(z_enc)
+        logits = self.classifier(z[:, -1])
         return logits, z_enc
- 
- 
 # ======================================================================
 #   PERTES — Section 3.2 et 3.3 du papier
 # ======================================================================
