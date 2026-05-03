@@ -1,0 +1,5 @@
+model:
+  name: EarlyVit
+  pretrained: false 
+  num_classes: ${num_classes}
+  # your hyperparameters
