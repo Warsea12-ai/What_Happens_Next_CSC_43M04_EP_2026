@@ -68,6 +68,7 @@ class EarlyVit(nn.Module):
 
         # ---- Encodeur ViT image, from-scratch ----
         encoder = vit_b_16(weights=None)
+        encoder.heads = nn.Identity()  # type: ignore # on n'utilise pas la tête de classification du ViT
         self.encoder = encoder
 
         # Projection vers la dimension du décodeur
