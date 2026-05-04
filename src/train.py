@@ -63,9 +63,11 @@ def build_model(cfg: DictConfig) -> nn.Module:
         )
     
     if name == "TSM":
-        print(cfg.experiment.get("n_resnet_layers") )
+        print(cfg.model.get("n_resnet_layers") )
         return TSM(
-            num_classes=num_classes, n_resnet_layers=cfg.experiment.get("n_resnet_layers") 
+            num_classes=num_classes, 
+            n_resnet_layers=cfg.model.get("n_resnet_layers", 50), 
+            fold_div=cfg.model.get("fold_div", 8)
         )
 
     raise ValueError(f"Unknown model.name: {name}")

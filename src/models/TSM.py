@@ -18,7 +18,7 @@ Format de sortie : (B, num_classes)
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
-from torchvision.models.resnet import BasicBlock
+from torchvision.models.resnet import BasicBlock, Bottleneck
 
 
 class TemporalShift(nn.Module):
@@ -72,74 +72,128 @@ class TSMBasicBlock(nn.Module):
         x = self.shift(x)
         return self.block(x)
 
+class ResidualTSMBasicBlock(nn.Module):
+    """
+    Variante "in-place residual shift" du papier TSM.
+    
+    Le shift est appliqué uniquement à la branche convolutive du résidu :
+    la connexion identité reste intacte. Cela évite que les corruptions
+    successives du shift s'accumulent à travers les blocs, tout en
+    laissant l'info temporelle se propager via la branche conv.
+    """
+    def __init__(self, basic_block: BasicBlock, n_segment: int, fold_div: int = 8):
+        super().__init__()
+        self.shift = TemporalShift(n_segment=n_segment, fold_div=fold_div)
+        self.block = basic_block
 
-def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8) -> None:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        identity = x                              # <-- on garde x intact
+        
+        # Branche convolutive : on shift, puis conv1/bn1/relu/conv2/bn2
+        out = self.shift(x)
+        out = self.block.conv1(out)
+        out = self.block.bn1(out)
+        out = self.block.relu(out)
+        out = self.block.conv2(out)
+        out = self.block.bn2(out)
+        
+        # Le downsample s'applique sur x (pas sur out) pour ajuster la
+        # résolution/canaux quand nécessaire (changement de stage)
+        if self.block.downsample is not None:
+            identity = self.block.downsample(x)
+        
+        out += identity
+        return self.block.relu(out)
+
+from torchvision.models.resnet import BasicBlock, Bottleneck
+
+
+class ResidualTSMBottleneck(nn.Module):
+    """Residual shift pour Bottleneck (ResNet-50/101/152).
+    
+    Différence avec BasicBlock : 3 convs (1x1 -> 3x3 -> 1x1) avec expansion x4,
+    donc il faut appeler conv3 et bn3 en plus.
     """
-    Insère un TemporalShift avant chaque BasicBlock de chaque layer du ResNet.
-    Modifie `net` en place.
-    """
+    def __init__(self, bottleneck: Bottleneck, n_segment: int, fold_div: int = 8):
+        super().__init__()
+        self.shift = TemporalShift(n_segment=n_segment, fold_div=fold_div)
+        self.block = bottleneck
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        identity = x
+        out = self.shift(x)
+        out = self.block.conv1(out)
+        out = self.block.bn1(out)
+        out = self.block.relu(out)
+        out = self.block.conv2(out)
+        out = self.block.bn2(out)
+        out = self.block.relu(out)
+        out = self.block.conv3(out)        # <-- la conv supplémentaire
+        out = self.block.bn3(out)
+        if self.block.downsample is not None:
+            identity = self.block.downsample(x)
+        out += identity
+        return self.block.relu(out)
+
+def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8,
+                        residual: bool = True) -> None:
     for layer_name in ["layer1", "layer2", "layer3", "layer4"]:
         layer = getattr(net, layer_name)
-        new_blocks = nn.Sequential(*[
-            TSMBasicBlock(block, n_segment=n_segment, fold_div=fold_div)
-            for block in layer
-        ])
-        setattr(net, layer_name, new_blocks)
-
+        new_blocks = []
+        for block in layer:
+            if isinstance(block, Bottleneck):
+                wrapped = ResidualTSMBottleneck(block, n_segment, fold_div)
+            elif isinstance(block, BasicBlock):
+                wrapped = ResidualTSMBasicBlock(block, n_segment, fold_div)
+            else:
+                raise TypeError(f"Bloc inattendu : {type(block).__name__}")
+            new_blocks.append(wrapped)
+        setattr(net, layer_name, nn.Sequential(*new_blocks))
 
 class TSM(nn.Module):
-    """
-    TSM-ResNet18, from-scratch, pour la classification vidéo.
-
-    Args
-    ----
-    num_classes : int
-        Nombre de classes (33 pour ton challenge).
-    n_segment : int
-        Nombre de frames par vidéo (4).
-    fold_div : int
-        Fraction de canaux décalés (papier : 8).
-    dropout : float
-        Dropout avant la couche de classification finale.
-    """
     def __init__(
         self,
         num_classes: int,
         n_segment: int = 4,
         fold_div: int = 8,
         dropout: float = 0.5,
-        n_resnet_layers: int = 18,
+        n_resnet_layers: int = 50,
+        residual_shift: bool = True,        # <-- nouveau
     ):
         super().__init__()
         self.n_segment = n_segment
 
         # Charger un ResNet-18 pré-entraîné sur ImageNet
         if n_resnet_layers == 18:
-            backbone = resnet18(weights=None)  # pretrained=False est déprécié, utiliser weights=None
+            backbone = resnet18(pretrained=False)
         elif n_resnet_layers == 34:       
-            backbone = resnet34(weights=None)
+            backbone = resnet34(pretrained=False)
         elif n_resnet_layers == 50:      
-            backbone = resnet50(weights=None)                
+            backbone = resnet50(pretrained=False)                
         elif n_resnet_layers == 101:      
-            backbone = resnet101(weights=None)                
-        elif n_resnet_layers == 152:  
-            backbone = resnet152(weights=None)
+            backbone = resnet101(pretrained=False)                
+        elif n_resnet_layers == 152:   
+            backbone = resnet152(pretrained=False)
         else:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
 
-        # Insérer les TemporalShift dans chaque BasicBlock
-        make_temporal_shift(backbone, n_segment=n_segment, fold_div=fold_div)
+        make_temporal_shift(
+            backbone,
+            n_segment=n_segment,
+            fold_div=fold_div,
+            residual=residual_shift,        # <-- propagation
+        )
 
-        # Remplacer la tête (1000 classes ImageNet → num_classes)
-        in_features = backbone.fc.in_features      # 512
-        backbone.fc = nn.Identity()  # type: ignore[assignment]
+        in_features = backbone.fc.in_features
+        backbone.fc = nn.Identity() #type:ignore 
         self.backbone = backbone
 
         self.head = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(in_features, num_classes),
         )
-
+    
+    # forward inchangé
     def forward(self, clips: torch.Tensor) -> torch.Tensor:
         B, T, C, H, W = clips.shape
         
@@ -154,3 +208,4 @@ class TSM(nn.Module):
         feats = self.backbone(x)
         feats = feats.view(B, T, -1).mean(dim=1)
         return self.head(feats)                    # (B, num_classes) 
+    
