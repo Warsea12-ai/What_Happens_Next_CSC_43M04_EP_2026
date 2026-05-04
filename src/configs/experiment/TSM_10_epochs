@@ -1,0 +1,8 @@
+# @package _global_
+defaults:
+  - override /model: TSM
+  - epochs = 10
+ 
+
+model:
+  pretrained: false
