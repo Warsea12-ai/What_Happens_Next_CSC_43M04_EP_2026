@@ -115,15 +115,15 @@ class TSM(nn.Module):
 
         # Charger un ResNet-18 pré-entraîné sur ImageNet
         if n_resnet_layers == 18:
-            backbone = resnet18(pretrained=False)
+            backbone = resnet18(weights=None)  # pretrained=False est déprécié, utiliser weights=None
         elif n_resnet_layers == 34:       
-            backbone = resnet34(pretrained=False)
+            backbone = resnet34(weights=None)
         elif n_resnet_layers == 50:      
-            backbone = resnet50(pretrained=False)                
+            backbone = resnet50(weights=None)                
         elif n_resnet_layers == 101:      
-            backbone = resnet101(pretrained=False)                
-        elif n_resnet_layers == 152:   
-            backbone = resnet152(pretrained=False)
+            backbone = resnet101(weights=None)                
+        elif n_resnet_layers == 152:  
+            backbone = resnet152(weights=None)
         else:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
 
