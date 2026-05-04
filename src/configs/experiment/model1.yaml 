@@ -1,7 +1,0 @@
-# @package _global_
-# Baseline experiment: ResNet18 + temporal average pooling
-defaults:
-  - override /model: modele1
-
-training:
-  checkpoint_path: ${hydra:runtime.cwd}/testA/best_model.pt
