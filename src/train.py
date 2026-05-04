@@ -29,6 +29,7 @@ from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
 from models.EarlyVit import EarlyVit
 from models.R2Plus1D import R2Plus1D 
+from models.TSM import TSM
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -58,6 +59,11 @@ def build_model(cfg: DictConfig) -> nn.Module:
     
     if name == "R2Plus1D":
         return R2Plus1D(
+            num_classes=num_classes
+        )
+    
+    if name == "TSM":
+        return TSM(
             num_classes=num_classes
         )
 
