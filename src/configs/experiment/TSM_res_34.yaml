@@ -1,8 +1,8 @@
 # @package _global_
 defaults:
   - override /model: TSM
-  - epochs = 10
- 
 
 model:
   pretrained: false
+
+n_resnet_layers : 34
