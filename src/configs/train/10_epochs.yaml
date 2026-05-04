@@ -1,0 +1,9 @@
+# @package _global_
+training:
+  batch_size: 8
+  lr: 0.0001
+  epochs: 100
+  num_workers: 2
+  # Where to save the best checkpoint (by validation accuracy)
+  checkpoint_path: ${hydra:runtime.cwd}/best_model_${hydra:runtime.choices.experiment}.pt
+  device: cuda

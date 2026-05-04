@@ -17,7 +17,7 @@ Format de sortie : (B, num_classes)
 """
 import torch
 import torch.nn as nn
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from torchvision.models.resnet import BasicBlock
 
 
@@ -108,12 +108,24 @@ class TSM(nn.Module):
         n_segment: int = 4,
         fold_div: int = 8,
         dropout: float = 0.5,
+        n_resnet_layers: int = 18,
     ):
         super().__init__()
         self.n_segment = n_segment
 
-        # Backbone ResNet-18 from-scratch
-        backbone = resnet18(weights=None)
+        # Charger un ResNet-18 pré-entraîné sur ImageNet
+        if n_resnet_layers == 18:
+            backbone = resnet18(pretrained=False)
+        elif n_resnet_layers == 34:       
+            backbone = resnet34(pretrained=False)
+        elif n_resnet_layers == 50:      
+            backbone = resnet50(pretrained=False)                
+        elif n_resnet_layers == 101:      
+            backbone = resnet101(pretrained=False)                
+        elif n_resnet_layers == 152:   
+            backbone = resnet152(pretrained=False)
+        else:
+            raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
 
         # Insérer les TemporalShift dans chaque BasicBlock
         make_temporal_shift(backbone, n_segment=n_segment, fold_div=fold_div)
@@ -141,4 +153,4 @@ class TSM(nn.Module):
         x = clips.reshape(B * T, C, H, W)
         feats = self.backbone(x)
         feats = feats.view(B, T, -1).mean(dim=1)
-        return self.head(feats)                    # (B, num_classes)
+        return self.head(feats)                    # (B, num_classes) 
