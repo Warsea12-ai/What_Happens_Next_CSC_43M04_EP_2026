@@ -66,8 +66,11 @@ def build_model(cfg: DictConfig) -> nn.Module:
         print(cfg.model.get("n_resnet_layers") )
         return TSM(
             num_classes=num_classes, 
+            n_segment=cfg.dataset.num_frames, 
             n_resnet_layers=cfg.model.get("n_resnet_layers", 50), 
-            fold_div=cfg.model.get("fold_div", 8)
+            fold_div=cfg.model.get("fold_div", 8),
+            residual_shift=cfg.model.get("residual_shift", True),
+            use_frame_diff=cfg.model.get("use_frame_diff", False), 
         )
 
     raise ValueError(f"Unknown model.name: {name}")

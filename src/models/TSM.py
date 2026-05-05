@@ -207,9 +207,10 @@ class TSM(nn.Module):
         fold_div: int = 4,
         dropout: float = 0.5,
         n_resnet_layers: int = 50,
-        residual_shift: bool = True,        # <-- nouveau
+        residual_shift: bool = True,     
         temporal_pool: str = "attention",
         use_nonlocal: bool = True,
+        use_frame_diff=False,             
     ):
         super().__init__()
         self.n_segment = n_segment
@@ -227,6 +228,17 @@ class TSM(nn.Module):
             backbone = resnet152(pretrained=False)
         else:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
+
+        if use_frame_diff :
+            old_conv = backbone.conv1
+            backbone.conv1 = nn.Conv2d(
+                in_channels=6,                              # <-- 6 au lieu de 3
+                out_channels=old_conv.out_channels,         # 64
+                kernel_size=old_conv.kernel_size,           # type:ignore 
+                stride=old_conv.stride,                     # type:ignore 
+                padding=old_conv.padding,                   # type:ignore 
+                bias=False,
+            )
 
         make_temporal_shift(
             backbone,
@@ -249,6 +261,9 @@ class TSM(nn.Module):
         )
         if use_nonlocal:
             insert_nonlocal(self.backbone, n_segment)
+        
+        self.n_segment = n_segment  # Stocker n_segment pour les shifts dynamiques
+        self.use_frame_diff = use_frame_diff
     
 
     def forward(self, clips: torch.Tensor) -> torch.Tensor:
@@ -260,12 +275,18 @@ class TSM(nn.Module):
             for layer_name in ["layer1", "layer2", "layer3", "layer4"]:
                 for block in getattr(self.backbone, layer_name):
                     block.shift.n_segment = T
+            for layer_name in ["layer1", "layer2", "layer3", "layer4"]:
+                for block in getattr(self.backbone, layer_name):
+                    if isinstance(block, NonLocalBlock):
+                        block.n_segment = T
         
-        diff = clips[:, 1:] - clips[:, :-1]
-        diff = torch.cat([torch.zeros_like(clips[:, :1]), diff], dim=1)
-        clips = torch.cat([clips, diff], dim=2)              # (B, T, 6, H, W)
+        if self.use_frame_diff:
+            diff = clips[:, 1:] - clips[:, :-1]
+            diff = torch.cat([torch.zeros_like(clips[:, :1]), diff], dim=1)
+            clips = torch.cat([clips, diff], dim=2)              # (B, T, 6, H, W)
+            C=6
 
-        x = clips.reshape(B * T, 6, H, W)
+        x = clips.reshape(B * T, C, H, W)
         feats = self.backbone(x)
         feats = self.backbone(x).view(B, T, -1)
 
