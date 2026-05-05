@@ -150,15 +150,66 @@ def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8,
             new_blocks.append(wrapped)
         setattr(net, layer_name, nn.Sequential(*new_blocks))
 
+class NonLocalBlock(nn.Module):
+    """Non-local block (Wang et al. 2018) en version embedded Gaussian."""
+    def __init__(self, in_channels, n_segment, reduction=2):
+        super().__init__()
+        inter = in_channels // reduction
+        self.n_segment = n_segment
+        self.theta = nn.Conv3d(in_channels, inter, 1)
+        self.phi   = nn.Conv3d(in_channels, inter, 1)
+        self.g     = nn.Conv3d(in_channels, inter, 1)
+        self.W = nn.Sequential(
+            nn.Conv3d(inter, in_channels, 1),
+            nn.BatchNorm3d(in_channels),
+        )
+        nn.init.zeros_(self.W[0].weight)   #type:ignore init à 0 = identité au départ
+
+    def forward(self, x):
+        # x : (B*T, C, H, W) -> (B, C, T, H, W) pour Conv3d
+        BT, C, H, W = x.shape
+        T = self.n_segment
+        B = BT // T
+        x_reshaped = x.view(B, T, C, H, W).permute(0, 2, 1, 3, 4).contiguous()
+
+        theta = self.theta(x_reshaped).flatten(2)              # (B, c, THW)
+        phi   = self.phi(x_reshaped).flatten(2)
+        g     = self.g(x_reshaped).flatten(2)
+
+        attn = torch.softmax(theta.transpose(1, 2) @ phi, dim=-1)
+        y = (g @ attn.transpose(1, 2)).view(B, -1, T, H, W)
+
+        y = self.W(y) + x_reshaped
+        return y.permute(0, 2, 1, 3, 4).reshape(BT, C, H, W)
+
+
+def insert_nonlocal(net, n_segment):
+    """Insère un NL block après le 2e bloc du layer3 (pratique standard TSM+NL)."""
+    layer3 = net.layer3
+    # Récupère les canaux de sortie
+    sample_block = layer3[0].block if hasattr(layer3[0], 'block') else layer3[0]
+    if hasattr(sample_block, 'conv3'):       # Bottleneck
+        out_ch = sample_block.conv3.out_channels
+    else:                                     # BasicBlock
+        out_ch = sample_block.conv2.out_channels
+
+    nl = NonLocalBlock(out_ch, n_segment)
+    new_layer3 = nn.Sequential(
+        layer3[0], layer3[1], nl, *layer3[2:]
+    )
+    net.layer3 = new_layer3
+
 class TSM(nn.Module):
     def __init__(
         self,
         num_classes: int,
         n_segment: int = 4,
-        fold_div: int = 8,
+        fold_div: int = 4,
         dropout: float = 0.5,
         n_resnet_layers: int = 50,
         residual_shift: bool = True,        # <-- nouveau
+        temporal_pool: str = "attention",
+        use_nonlocal: bool = True,
     ):
         super().__init__()
         self.n_segment = n_segment
@@ -187,13 +238,19 @@ class TSM(nn.Module):
         in_features = backbone.fc.in_features
         backbone.fc = nn.Identity() #type:ignore 
         self.backbone = backbone
+        self.temporal_pool = temporal_pool
+
+        if temporal_pool == "attention":
+            self.attn = nn.Linear(in_features, 1)  # pour calculer les poids d'attention
 
         self.head = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(in_features, num_classes),
         )
+        if use_nonlocal:
+            insert_nonlocal(self.backbone, n_segment)
     
-    # forward inchangé
+
     def forward(self, clips: torch.Tensor) -> torch.Tensor:
         B, T, C, H, W = clips.shape
         
@@ -204,8 +261,21 @@ class TSM(nn.Module):
                 for block in getattr(self.backbone, layer_name):
                     block.shift.n_segment = T
         
-        x = clips.reshape(B * T, C, H, W)
+        diff = clips[:, 1:] - clips[:, :-1]
+        diff = torch.cat([torch.zeros_like(clips[:, :1]), diff], dim=1)
+        clips = torch.cat([clips, diff], dim=2)              # (B, T, 6, H, W)
+
+        x = clips.reshape(B * T, 6, H, W)
         feats = self.backbone(x)
-        feats = feats.view(B, T, -1).mean(dim=1)
+        feats = self.backbone(x).view(B, T, -1)
+
+        if self.temporal_pool == "mean":
+            feats = feats.mean(dim=1)
+        elif self.temporal_pool == "attention":
+            w = torch.softmax(self.attn(feats), dim=1)  # (B, T, 1)
+            feats = (feats * w).sum(dim=1)              # (B, D)
+        elif self.temporal_pool == "last":
+            feats = feats[:, -1]  
+
         return self.head(feats)                    # (B, num_classes) 
     
