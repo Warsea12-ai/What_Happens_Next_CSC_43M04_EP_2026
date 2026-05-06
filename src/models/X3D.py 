@@ -1,0 +1,79 @@
+import torch
+import torch.nn as nn
+from pytorchvideo.models.x3d import create_x3d
+
+
+class X3D(nn.Module):
+    """
+    X3D-XS adapté pour le format (B, T, C, H, W) avec T=4.
+
+    Variante "XS" du papier : conçue pour 4 frames d'entrée.
+    - ~3M paramètres
+    - Trains from scratch (pas besoin de pretrain)
+    - Convolutions 3D spatio-temporelles
+    """
+    def __init__(
+        self,
+        num_classes: int,
+        variant: str = "xs",        # "xs" (4 frames), "s" (13), "m" (16)
+        input_clip_length: int = 4,
+        input_crop_size: int = 182, # 160 pour XS, 224 pour S/M dans le paper
+        dropout: float = 0.5,
+    ):
+        super().__init__()
+        self.num_frames = input_clip_length
+
+        # Configs officielles X3D-XS du papier
+        configs = {
+            "xs": dict(
+                input_clip_length=4,
+                input_crop_size=160,
+                depth_factor=2.2,
+                width_factor=2.0,
+                bottleneck_factor=2.25,
+            ),
+            "s": dict(
+                input_clip_length=13,
+                input_crop_size=160,
+                depth_factor=2.2,
+                width_factor=2.0,
+                bottleneck_factor=2.25,
+            ),
+            "m": dict(
+                input_clip_length=16,
+                input_crop_size=224,
+                depth_factor=2.2,
+                width_factor=2.0,
+                bottleneck_factor=2.25,
+            ),
+        }
+        cfg = configs[variant]
+
+        self.model = create_x3d(
+            input_channel=3,
+            input_clip_length=input_clip_length,
+            input_crop_size=input_crop_size,
+            model_num_class=num_classes,
+            dropout_rate=dropout,
+            width_factor=cfg["width_factor"],
+            depth_factor=cfg["depth_factor"],
+            bottleneck_factor=cfg["bottleneck_factor"],
+        )
+
+    def forward(self, clips: torch.Tensor) -> torch.Tensor:
+        # clips: (B, T, C, H, W)
+        B, T, C, H, W = clips.shape
+        assert T == self.num_frames, (
+            f"X3D-{self.num_frames} attend T={self.num_frames} frames, reçu T={T}"
+        )
+        # PyTorchVideo attend (B, C, T, H, W)
+        x = clips.permute(0, 2, 1, 3, 4).contiguous()
+        return self.model(x)
+
+
+if __name__ == "__main__":
+    model = X3D(num_classes=33, variant="xs")
+    x = torch.randn(2, 4, 3, 160, 160)        # 160×160 selon le paper pour XS
+    print(model(x).shape)                       # torch.Size([2, 33])
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"Params: {n_params / 1e6:.2f}M")

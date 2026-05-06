@@ -1,0 +1,5 @@
+name: X3D
+pretrained: False 
+num_classes: ${num_classes}
+n_segment: ${dataset.num_frames}
+# your hyperparameters
