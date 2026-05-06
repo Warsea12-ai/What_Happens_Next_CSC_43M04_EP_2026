@@ -4,5 +4,6 @@ defaults:
 
 model:
   pretrained: false
-
-n_resnet_layers : 34
+  n_resnet_layers : 152
+  res_shift : True 
+  fold_div : 4 
