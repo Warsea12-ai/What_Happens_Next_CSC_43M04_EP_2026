@@ -189,7 +189,7 @@ def train_one_epoch(
     loss_fn: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    use_augment: bool = False,
+    use_augment: bool = True,
     color_strength: float = 0.4,
     blur_prob: float = 0.3,
 ) -> Tuple[float, float]:
