@@ -54,7 +54,6 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "EarlyVit":
         return EarlyVit(
             num_classes=cfg.model.num_classes,
-            # autres hyperparamètres si tu en mets dans le yaml
         )
     
     if name == "R2Plus1D":
@@ -71,6 +70,9 @@ def build_model(cfg: DictConfig) -> nn.Module:
             fold_div=cfg.model.get("fold_div", 8),
             residual_shift=cfg.model.get("residual_shift", True),
             use_frame_diff=cfg.model.get("use_frame_diff", False), 
+            temporal_pool=cfg.model.get("temporal_pool", "attention"),
+            use_positional_encoding=cfg.model.get("use_positional_encoding", True),
+            pe_mode=cfg.model.get("pe_mode", "sinusoidal"),
         )
 
     raise ValueError(f"Unknown model.name: {name}")
