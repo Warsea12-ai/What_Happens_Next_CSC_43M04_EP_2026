@@ -17,6 +17,7 @@ import torch
 import torch.nn as nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from torchvision.models.resnet import BasicBlock, Bottleneck
+import torch.nn.functional as F
 
 
 # =============================================================================
@@ -49,13 +50,6 @@ class TemporalShift(nn.Module):
 # Residual TSM blocks avec stochastic depth
 # =============================================================================
 class ResidualTSMBasicBlock(nn.Module):
-    """
-    Residual shift + stochastic depth pour BasicBlock (R18/R34).
-    
-    Le shift est appliqué uniquement à la branche convolutive ; la connexion
-    identité reste intacte. Stochastic depth drop le résidu entier à proba
-    drop_prob (utile from-scratch pour régulariser).
-    """
     def __init__(self, basic_block: BasicBlock, n_segment: int,
                  fold_div: int = 8, drop_prob: float = 0.0):
         super().__init__()
@@ -68,10 +62,9 @@ class ResidualTSMBasicBlock(nn.Module):
         if self.block.downsample is not None:
             identity = self.block.downsample(x)
 
-        # Stochastic depth : drop le résidu entier
         if self.training and self.drop_prob > 0.0:
             if torch.rand(1, device=x.device).item() < self.drop_prob:
-                return self.block.relu(identity)
+                return F.relu(identity)        # <-- relu non-inplace
 
         out = self.shift(x)
         out = self.block.conv1(out)
@@ -80,14 +73,11 @@ class ResidualTSMBasicBlock(nn.Module):
         out = self.block.conv2(out)
         out = self.block.bn2(out)
 
-        out = out + identity
-        return self.block.relu(out)
+        out = out + identity                   # <-- pas de +=
+        return F.relu(out)                     # <-- relu non-inplace
 
 
 class ResidualTSMBottleneck(nn.Module):
-    """
-    Residual shift + stochastic depth pour Bottleneck (R50/R101/R152).
-    """
     def __init__(self, bottleneck: Bottleneck, n_segment: int,
                  fold_div: int = 8, drop_prob: float = 0.0):
         super().__init__()
@@ -102,7 +92,7 @@ class ResidualTSMBottleneck(nn.Module):
 
         if self.training and self.drop_prob > 0.0:
             if torch.rand(1, device=x.device).item() < self.drop_prob:
-                return self.block.relu(identity)
+                return F.relu(identity)
 
         out = self.shift(x)
         out = self.block.conv1(out)
@@ -114,8 +104,8 @@ class ResidualTSMBottleneck(nn.Module):
         out = self.block.conv3(out)
         out = self.block.bn3(out)
 
-        out = out + identity
-        return self.block.relu(out)
+        out = out + identity                   # <-- pas de +=
+        return F.relu(out)                     # <-- relu non-inplace
 
 
 def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8,
@@ -233,7 +223,7 @@ class TemporalPositionalEncoding(nn.Module):
 # =============================================================================
 # Modèle principal
 # =============================================================================
-class TSM(nn.Module):
+class TSM_s(nn.Module):
     """
     TSM avec backbone ResNet, conçu pour from-scratch sur petits datasets.
     
