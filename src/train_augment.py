@@ -35,6 +35,7 @@ from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
+from models.X3D import X3D 
 
 
 # =====================================================================
@@ -163,6 +164,19 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pe_mode=cfg.model.get("pe_mode", "sinusoidal"),
         )
 
+    if name == "X3D":
+        return X3D(
+            num_classes=num_classes,
+            variant=cfg.model.get("variant", "xs"),
+            input_clip_length=int(cfg.dataset.num_frames),
+            input_crop_size=cfg.model.get("input_crop_size", 160),
+            use_se=cfg.model.get("use_se", True),
+            use_temporal_attention=cfg.model.get("use_temporal_attention", True),
+            use_aux_head=cfg.model.get("use_aux_head", True),
+            use_frame_diff=cfg.model.get("use_frame_diff", False),
+            drop_path_rate=cfg.model.get("drop_path_rate", 0.1),
+        )
+    
     raise ValueError(f"Unknown model.name: {name}")
 
 
