@@ -2,4 +2,5 @@ name: TSM
 pretrained: False 
 num_classes: ${num_classes}
 n_segment: ${dataset.num_frames}
+pe_mode: sinusoidal   
 # your hyperparameters

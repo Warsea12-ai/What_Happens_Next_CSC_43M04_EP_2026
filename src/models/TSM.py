@@ -199,6 +199,62 @@ def insert_nonlocal(net, n_segment):
     )
     net.layer3 = new_layer3
 
+import math
+
+
+class TemporalPositionalEncoding(nn.Module):
+    """
+    Positional encoding 1D appliqué sur l'axe temporel des features.
+    
+    Deux modes :
+        - "sinusoidal" : PE fixe à la Vaswani et al. (Transformer 2017).
+                         Pas de paramètres, généralise bien.
+        - "learned"    : embedding apprenable (1 vecteur par position).
+                         Plus flexible mais nécessite assez de données.
+    
+    Args
+    ----
+    d_model : int
+        Dimension des features (ici in_features = 512 pour R18, 2048 pour R50).
+    max_len : int
+        Nombre max de frames supportées (4 dans ton cas, mets 32 par sécurité).
+    mode : str
+        "sinusoidal" ou "learned".
+    """
+    def __init__(self, d_model: int, max_len: int = 32, mode: str = "sinusoidal"):
+        super().__init__()
+        self.mode = mode
+        self.d_model = d_model
+
+        if mode == "sinusoidal":
+            # PE fixe : pas de paramètres, calculé une fois pour toutes
+            pe = torch.zeros(max_len, d_model)
+            position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+            div_term = torch.exp(
+                torch.arange(0, d_model, 2).float()
+                * (-math.log(10000.0) / d_model)
+            )
+            pe[:, 0::2] = torch.sin(position * div_term)
+            pe[:, 1::2] = torch.cos(position * div_term)
+            # register_buffer = pas un Parameter (pas de gradient), mais bouge avec .to(device)
+            self.register_buffer("pe", pe.unsqueeze(0))    # (1, max_len, d_model)
+
+        elif mode == "learned":
+            # PE apprenable : 1 vecteur par position
+            self.pe = nn.Parameter(torch.zeros(1, max_len, d_model))
+            nn.init.trunc_normal_(self.pe, std=0.02)
+
+        else:
+            raise ValueError(f"Unknown PE mode: {mode}")
+
+    def forward(self, feats: torch.Tensor) -> torch.Tensor:
+        """
+        feats : (B, T, D)
+        retour : (B, T, D) avec PE ajouté
+        """
+        T = feats.size(1)
+        return feats + self.pe[:, :T]                       # broadcast sur la dim batch
+
 class TSM(nn.Module):
     def __init__(
         self,
@@ -210,7 +266,9 @@ class TSM(nn.Module):
         residual_shift: bool = True,     
         temporal_pool: str = "attention",
         use_nonlocal: bool = True,
-        use_frame_diff=False,             
+        use_frame_diff=False, 
+        use_positional_encoding: bool = True,             # <-- NEW
+        pe_mode: str = "sinusoidal",              
     ):
         super().__init__()
         self.n_segment = n_segment
@@ -252,6 +310,14 @@ class TSM(nn.Module):
         self.backbone = backbone
         self.temporal_pool = temporal_pool
 
+        self.use_positional_encoding = use_positional_encoding
+        if use_positional_encoding:
+            self.pos_encoding = TemporalPositionalEncoding(
+                d_model=in_features,
+                max_len=4,                          # tolérant pour tester avec T>4
+                mode=pe_mode,
+            )
+
         if temporal_pool == "attention":
             self.attn = nn.Linear(in_features, 1)  # pour calculer les poids d'attention
 
@@ -288,6 +354,9 @@ class TSM(nn.Module):
 
         x = clips.reshape(B * T, C, H, W)
         feats = self.backbone(x).view(B, T, -1)
+
+        if self.use_positional_encoding:
+            feats = self.pos_encoding(feats)
 
         if self.temporal_pool == "mean":
             feats = feats.mean(dim=1)
