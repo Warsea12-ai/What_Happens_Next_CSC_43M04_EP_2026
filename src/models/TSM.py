@@ -287,7 +287,6 @@ class TSM(nn.Module):
             C=6
 
         x = clips.reshape(B * T, C, H, W)
-        feats = self.backbone(x)
         feats = self.backbone(x).view(B, T, -1)
 
         if self.temporal_pool == "mean":
