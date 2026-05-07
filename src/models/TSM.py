@@ -253,7 +253,7 @@ class TemporalPositionalEncoding(nn.Module):
         retour : (B, T, D) avec PE ajouté
         """
         T = feats.size(1)
-        return feats + self.pe[:, :T]                       # broadcast sur la dim batch
+        return feats + self.pe[:, :T]                       
 
 class TSM(nn.Module):
     def __init__(
@@ -267,7 +267,7 @@ class TSM(nn.Module):
         temporal_pool: str = "attention",
         use_nonlocal: bool = True,
         use_frame_diff=False, 
-        use_positional_encoding: bool = True,             # <-- NEW
+        use_positional_encoding: bool = True,             
         pe_mode: str = "sinusoidal",              
     ):
         super().__init__()
@@ -314,7 +314,7 @@ class TSM(nn.Module):
         if use_positional_encoding:
             self.pos_encoding = TemporalPositionalEncoding(
                 d_model=in_features,
-                max_len=4,                          # tolérant pour tester avec T>4
+                max_len=32,                          
                 mode=pe_mode,
             )
 
