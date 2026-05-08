@@ -30,6 +30,7 @@ from models.cnn_lstm import CNNLSTM
 from models.EarlyVit import EarlyVit
 from models.R2Plus1D import R2Plus1D 
 from models.TSM import TSM
+from models.TSM_s import TSM_s
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -73,6 +74,22 @@ def build_model(cfg: DictConfig) -> nn.Module:
             temporal_pool=cfg.model.get("temporal_pool", "attention"),
             use_positional_encoding=cfg.model.get("use_positional_encoding", True),
             pe_mode=cfg.model.get("pe_mode", "sinusoidal"),
+        )
+
+    if name == "TSM_s":
+        return TSM_s(
+            num_classes=num_classes,
+            n_segment=4,
+            fold_div=8,
+            dropout=0.5,
+            n_resnet_layers=18,           # commence ici
+            temporal_pool="attention",
+            use_nonlocal=False,           # à activer plus tard
+            use_frame_diff=True,
+            use_positional_encoding=True,
+            pe_mode="learned",
+            stochastic_depth=0.1,
+            head_hidden=False,
         )
 
     raise ValueError(f"Unknown model.name: {name}")
