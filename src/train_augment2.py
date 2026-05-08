@@ -317,7 +317,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
         )
     if name == "X3D":
         return X3D(
-            num_classes=num_classes,
+            num_classes=cfg.model.get("num_classes", 33),
             variant=cfg.model.get("variant", "xs"),
             input_clip_length=int(cfg.dataset.num_frames),
             input_crop_size=cfg.model.get("input_crop_size", 160),

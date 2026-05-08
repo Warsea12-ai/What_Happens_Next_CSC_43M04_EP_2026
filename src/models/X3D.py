@@ -52,7 +52,7 @@ class SqueezeExcite3D(nn.Module):
             squeeze = x.mean(dim=(2, 3, 4))      # (B, C)
         else:
             squeeze = x
-        excite = torch.sigmoid(self.fc2(F.relu(self.fc1(squeeze), inplace=True)))
+        excite = torch.sigmoid(self.fc2(F.relu(self.fc1(squeeze))))
         if x.dim() == 5:
             return x * excite.view(x.size(0), -1, 1, 1, 1)
         return x * excite
@@ -72,6 +72,22 @@ class DropPath(nn.Module):
         mask = x.new_empty(shape).bernoulli_(keep_prob).div_(keep_prob)
         return x * mask
 
+class TemporalTransformer(nn.Module):
+    def __init__(self, dim, num_heads=4, depth=1):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            nn.TransformerEncoderLayer(dim, num_heads, batch_first=True, dropout=0.1)
+            for _ in range(depth)
+        ])
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
+    
+    def forward(self, x):  # (B, T, D)
+        cls = self.cls_token.expand(x.size(0), -1, -1)
+        x = torch.cat([cls, x], dim=1)
+        for layer in self.layers:
+            x = layer(x)
+        return x[:, 0]  # CLS token
 
 # ======================================================================
 #   X3D AMÉLIORÉ
@@ -106,17 +122,17 @@ class X3D(nn.Module):
         Stochastic depth pour régulariser. 0.1 raisonnable from-scratch.
     """
     def __init__(
-        self,
-        num_classes: int,
-        variant: str = "xs",
-        input_clip_length: int = 4,
-        input_crop_size: int = 160,
-        dropout: float = 0.5,
-        use_se: bool = True,
-        use_temporal_attention: bool = True,
-        use_aux_head: bool = True,
-        use_frame_diff: bool = False,
-        drop_path_rate: float = 0.1,
+        self, 
+        num_classes=33,
+        variant="xs",
+        input_clip_length=4,
+        input_crop_size=160,
+        dropout=0.6,
+        use_se=True,
+        use_temporal_attention=True,
+        use_aux_head=True,
+        use_frame_diff=True,
+        drop_path_rate=0.2, 
     ):
         super().__init__()
         self.num_frames = input_clip_length
@@ -151,20 +167,19 @@ class X3D(nn.Module):
             bottleneck_factor=cfg["bottleneck_factor"],
         )
 
-        # On va remplacer la tête finale du backbone par notre propre pipeline
-        # pour pouvoir insérer SE / temporal attention / aux head.
-        # Mais d'abord, on doit récupérer la dimension des features pré-tête.
-        # Dans X3D créé par PyTorchVideo, la dernière partie est un "head"
-        # qui contient pool -> dropout -> proj. On la remplace par Identity
-        # et on prend la sortie juste avant.
-        head = self.backbone.blocks[-1] #type:ignore 
-        # On veut : la projection finale (proj.weight.shape[1]) = embed_dim
-        feature_dim = head.proj.weight.shape[1] #type:ignore 
+        # ---- Détection automatique de la feature_dim ----
+        # On fait un forward dummy à travers tous les blocs sauf le head
+        # pour récupérer la vraie dimension de sortie sans hardcoder.
+        with torch.no_grad():
+            dummy = torch.zeros(
+                1, in_channels, input_clip_length,
+                input_crop_size, input_crop_size,
+            )
+            feat = dummy
+            for block in self.backbone.blocks[:-1]:  # type: ignore
+                feat = block(feat)
+            feature_dim = feat.shape[1]
         self.feature_dim = feature_dim
-
-        # On désactive la tête originale : on travaille à partir des feature maps
-        # pré-pooling. Pour ça, on bypasse le head dans forward.
-        self.backbone_head = head        # gardé pour debug, pas utilisé directement
 
         # ---- Squeeze-Excite channel attention (optionnel) ----
         if use_se:
@@ -172,13 +187,16 @@ class X3D(nn.Module):
 
         # ---- Temporal attention pour le pooling apprenable ----
         if use_temporal_attention:
-            self.temporal_attn = nn.Linear(feature_dim, 1)
+            self.temporal_attn = TemporalTransformer(feature_dim, num_heads=4, depth=1)
 
         # ---- DropPath ----
         self.drop_path = DropPath(drop_path_rate)
 
-        # ---- Tête principale ----
+        # ---- Dropouts ----
         self.dropout = nn.Dropout(dropout)
+        self.spatial_dropout = nn.Dropout3d(dropout * 0.5)
+
+        # ---- Tête principale ----
         self.classifier = nn.Linear(feature_dim, num_classes)
 
         # ---- Tête auxiliaire (régularisation from-scratch) ----
@@ -186,6 +204,8 @@ class X3D(nn.Module):
             self.aux_classifier = nn.Linear(feature_dim, num_classes)
 
         self._init_new_params()
+        self.spatial_dropout = nn.Dropout3d(dropout * 0.5)
+
 
     def _init_new_params(self):
         """Init adaptée from-scratch : zero-init des têtes pour démarrer
@@ -195,9 +215,6 @@ class X3D(nn.Module):
         if self.use_aux_head:
             nn.init.trunc_normal_(self.aux_classifier.weight, std=0.01)
             nn.init.zeros_(self.aux_classifier.bias)
-        if self.use_temporal_attention:
-            nn.init.zeros_(self.temporal_attn.weight)
-            nn.init.zeros_(self.temporal_attn.bias)
 
     # ------------------------------------------------------------------
     def _add_frame_diff(self, clips: torch.Tensor) -> torch.Tensor:
@@ -250,17 +267,15 @@ class X3D(nn.Module):
 
         # 5. Spatial global pooling
         # (B, D, T', H', W') -> (B, D, T')
+        feat_map = self.spatial_dropout(feat_map)
         feat_temporal = feat_map.mean(dim=(3, 4))          # spatial avg
 
-        # 6. Temporal pooling : attention apprenable ou simple moyenne
+        # 6. Temporal pooling : transformer avec CLS token ou simple moyenne
         if self.use_temporal_attention:
-            # (B, D, T') -> (B, T', D)
-            feat_t = feat_temporal.transpose(1, 2)
-            scores = self.temporal_attn(feat_t)             # (B, T', 1)
-            weights = torch.softmax(scores, dim=1)
-            features = (feat_t * weights).sum(dim=1)        # (B, D)
+            feat_t = feat_temporal.transpose(1, 2)          # (B, T', D)
+            features = self.temporal_attn(feat_t)            # (B, D) — CLS token
         else:
-            features = feat_temporal.mean(dim=2)             # (B, D)
+            features = feat_temporal.mean(dim=2)             # (B, D)           # (B, D)
 
         # 7. DropPath sur la représentation finale (régularisation)
         features = self.drop_path(features)
@@ -271,8 +286,9 @@ class X3D(nn.Module):
 
         # 9. Tête auxiliaire (sur la moyenne temporelle pure, pas l'attention)
         if self.use_aux_head and self.training:
-            features_aux = feat_temporal.mean(dim=2)         # (B, D)
-            logits_aux = self.aux_classifier(self.dropout(features_aux))
+            per_frame_feats = feat_temporal.transpose(1, 2)  # (B, T', D)
+            per_frame_logits = self.aux_classifier(self.dropout(per_frame_feats))  # (B, T', K)
+            logits_aux = per_frame_logits.mean(dim=1)  # moyenne des prédictions par frame
             return logits_main, logits_aux
 
         return logits_main
