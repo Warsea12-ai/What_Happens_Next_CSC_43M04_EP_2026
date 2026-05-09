@@ -31,6 +31,7 @@ from models.EarlyVit import EarlyVit
 from models.R2Plus1D import R2Plus1D 
 from models.TSM import TSM
 from models.TSM_s import TSM_s
+from models.TSM_RES import TSMResNet50
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -90,6 +91,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pe_mode="learned",
             stochastic_depth=0.1,
             head_hidden=False,
+        )
+
+    if name == "TSM_RES":
+        return TSMResNet50(
+            num_classes=num_classes,
+            num_segments=cfg.dataset.num_frames,
+            n_div=8,
+            dropout=0.5,
+            pretrained=pretrained,
+            consensus=cfg.model.get("consensus", "avg"),
         )
 
     raise ValueError(f"Unknown model.name: {name}")
