@@ -2,5 +2,7 @@
 defaults:
   - override /model: TSM_s
 
+
 model:
   pretrained: false
+  n_resnet_layers : 50
