@@ -12,236 +12,190 @@ add more overrides). You can still override any key, e.g. ``model.pretrained=fal
 Training uses ``dataset.train_dir`` and ``split_train_val`` for an internal train/val
 split; the dedicated ``dataset.val_dir`` is for ``evaluate.py`` only.
 """
-
 from __future__ import annotations
 
-import math
-import random
-from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
-import hydra
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import DataLoader
-
-from dataset.video_dataset import VideoFrameDataset, collect_video_samples
-from models.cnn_baseline import CNNBaseline
-from models.cnn_lstm import CNNLSTM
-from models.EarlyVit import EarlyVit
-from models.R2Plus1D import R2Plus1D
-from models.TSM import TSM
-from models.TSM_s import TSM_s
-from utils import build_transforms, set_seed, split_train_val
-from torchvision.models.video import mvit_v1_b
-from models.TSM_RES import TSMResNet50
-from models.X3D import X3D
-
-
-# =====================================================================
-#   AUGMENTATIONS SPATIALES (cohérentes temporellement)
-# =====================================================================
-@torch.no_grad()
-def random_horizontal_flip_video(clips: torch.Tensor, p: float = 0.5) -> torch.Tensor:
-    """
-    Flip horizontal aléatoire, MÊME décision pour les T frames d'un clip.
-    Décision indépendante par vidéo dans le batch.
-
-    clips : (B, T, C, H, W)
-    """
-    B = clips.shape[0]
-    out = clips.clone()
-    for b in range(B):
-        if random.random() < p:
-            out[b] = torch.flip(out[b], dims=[-1])  # flip W
-    return out
-
 
 @torch.no_grad()
-def random_resized_crop_video(
-    clips: torch.Tensor,
-    scale: Tuple[float, float] = (0.7, 1.0),
-    ratio: Tuple[float, float] = (0.85, 1.15),
+def color_jitter_video(
+    clips: torch.Tensor, p: float = 0.8, strength: float = 0.4,
 ) -> torch.Tensor:
-    """
-    Crop aléatoire (zoom) puis resize à la taille originale.
-    MÊME crop pour les T frames d'un clip, crops indépendants entre vidéos.
-
-    clips : (B, T, C, H, W)
-    """
+    """Brightness / contrast / saturation, MEMES facteurs sur les T frames
+    d'un clip. Suppose clips ∈ [0, 1]."""
     B, T, C, H, W = clips.shape
-    out = torch.empty_like(clips)
+    device, dtype = clips.device, clips.dtype
 
-    for b in range(B):
-        # Tirage des paramètres du crop
-        for _ in range(10):  # 10 essais pour trouver un crop valide
-            target_area = random.uniform(*scale) * H * W
-            aspect_ratio = random.uniform(*ratio)
-            w = int(round(math.sqrt(target_area * aspect_ratio)))
-            h = int(round(math.sqrt(target_area / aspect_ratio)))
-            if 0 < w <= W and 0 < h <= H:
-                break
-        else:
-            # Fallback : center crop si rien ne marche
-            w, h = min(W, H), min(W, H)
+    def _factor():
+        return 1 + (torch.rand(B, 1, 1, 1, 1, device=device, dtype=dtype) * 2 - 1) * strength
 
-        i = random.randint(0, H - h)
-        j = random.randint(0, W - w)
+    brightness = _factor()
+    contrast   = _factor()
+    saturation = _factor()
 
-        # Appliqué identiquement aux T frames
-        cropped = clips[b, :, :, i:i + h, j:j + w]              # (T, C, h, w)
-        # Resize à (H, W) — interpolate attend (N, C, H, W)
-        resized = F.interpolate(
-            cropped, size=(H, W), mode="bilinear", align_corners=False
-        )
-        out[b] = resized
+    v = clips * brightness
 
-    return out
+    # Contrast : autour de la moyenne par vidéo
+    mean_per_video = v.mean(dim=(1, 3, 4), keepdim=True)         # (B, 1, C, 1, 1)
+    v = (v - mean_per_video) * contrast + mean_per_video
 
-
-@torch.no_grad()
-def random_temporal_reverse(clips: torch.Tensor, p: float = 0.5) -> torch.Tensor:
-    """
-    Inverse l'ordre temporel des frames avec proba p.
-    ATTENTION : ne pas utiliser si les classes dépendent du sens du temps
-    (ex. "ouvrir" vs "fermer").
-
-    clips : (B, T, C, H, W)
-    """
-    B = clips.shape[0]
-    out = clips.clone()
-    for b in range(B):
-        if random.random() < p:
-            out[b] = torch.flip(out[b], dims=[0])  # flip T
-    return out
-
-
-# =====================================================================
-#   AUGMENTATIONS PHOTOMETRIQUES (cohérentes temporellement)
-# =====================================================================
-@torch.no_grad()
-def color_jitter_video(clips: torch.Tensor, strength: float = 0.4) -> torch.Tensor:
-    """
-    Brightness, contrast, saturation : MÊMES facteurs sur les T frames.
-    clips : (B, T, C, H, W) en [0, 1]
-    """
-    B, T, C, H, W = clips.shape
-    out = clips.clone()
-
-    for b in range(B):
-        brightness = 1 + random.uniform(-strength, strength)
-        contrast   = 1 + random.uniform(-strength, strength)
-        saturation = 1 + random.uniform(-strength, strength)
-
-        v = out[b]                                          # (T, C, H, W)
-        v = v * brightness
-
-        mean_per_video = v.mean(dim=(0, 2, 3), keepdim=True)
-        v = (v - mean_per_video) * contrast + mean_per_video
-
-        gray = (0.299 * v[:, 0] + 0.587 * v[:, 1] + 0.114 * v[:, 2]).unsqueeze(1)
+    # Saturation : autour du gris (suppose RGB)
+    if C == 3:
+        gray = (
+            0.299 * v[:, :, 0] + 0.587 * v[:, :, 1] + 0.114 * v[:, :, 2]
+        ).unsqueeze(2)                                            # (B, T, 1, H, W)
         v = (v - gray) * saturation + gray
 
-        out[b] = v.clamp(0, 1)
+    v = v.clamp(0, 1)
 
-    return out
+    apply_mask = torch.rand(B, 1, 1, 1, 1, device=device) < p
+    return torch.where(apply_mask, v, clips)
 
 
 @torch.no_grad()
 def gaussian_blur_video(
     clips: torch.Tensor,
+    p: float = 0.3,
     sigma_range: Tuple[float, float] = (0.1, 1.5),
     kernel_size: int = 5,
 ) -> torch.Tensor:
-    """Flou gaussien, MÊME sigma sur les T frames d'un clip."""
+    """Flou gaussien avec sigma différent par vidéo, en une seule conv groupée."""
     B, T, C, H, W = clips.shape
-    out = clips.clone()
+    device, dtype = clips.device, clips.dtype
     half = kernel_size // 2
 
-    for b in range(B):
-        sigma = random.uniform(*sigma_range)
-        x = torch.arange(kernel_size, dtype=clips.dtype, device=clips.device) - half
-        gauss_1d = torch.exp(-x ** 2 / (2 * sigma ** 2))
-        gauss_1d = gauss_1d / gauss_1d.sum()
-        kernel = gauss_1d[:, None] * gauss_1d[None, :]
-        kernel = kernel.expand(C, 1, kernel_size, kernel_size)
+    # Sigma par vidéo, noyau 1D puis 2D séparable
+    sigmas = torch.empty(B, device=device, dtype=dtype).uniform_(*sigma_range)
+    x = (torch.arange(kernel_size, device=device, dtype=dtype) - half)         # (K,)
+    g1 = torch.exp(-(x[None, :] ** 2) / (2 * sigmas[:, None] ** 2))             # (B, K)
+    g1 = g1 / g1.sum(dim=1, keepdim=True)
+    kernel2d = g1[:, :, None] * g1[:, None, :]                                  # (B, K, K)
 
-        v = out[b].reshape(T, C, H, W)
-        v = F.conv2d(v, kernel, padding=half, groups=C)
-        out[b] = v
+    # Un noyau par (vidéo, canal) — convolution groupée
+    kernel = (
+        kernel2d[:, None, :, :].expand(B, C, kernel_size, kernel_size)
+        .reshape(B * C, 1, kernel_size, kernel_size)
+    )
 
-    return out
+    # (B, T, C, H, W) → (T, B*C, H, W) pour passer en une seule conv2d
+    x_in = clips.permute(1, 0, 2, 3, 4).reshape(T, B * C, H, W)
+    blurred = F.conv2d(x_in, kernel, padding=half, groups=B * C)
+    blurred = blurred.reshape(T, B, C, H, W).permute(1, 0, 2, 3, 4).contiguous()
+
+    apply_mask = torch.rand(B, 1, 1, 1, 1, device=device) < p
+    return torch.where(apply_mask, blurred, clips)
 
 
 @torch.no_grad()
-def random_erasing_video(
+def pixelation_video(
     clips: torch.Tensor,
-    p: float = 0.25,
-    scale: Tuple[float, float] = (0.02, 0.15),
-    ratio: Tuple[float, float] = (0.3, 3.3),
+    p: float = 0.3,
+    block_range: Tuple[int, int] = (3, 10),
 ) -> torch.Tensor:
-    """
-    Random erasing : efface une zone rectangulaire avec du bruit.
-    MÊME zone effacée sur les T frames d'un clip (cohérence spatiale).
-    """
+    """Effet pixelisé : downsample agressif puis nearest-upsample.
+    Taille de bloc différente par vidéo, MEME bloc sur les T frames."""
     B, T, C, H, W = clips.shape
     out = clips.clone()
 
+    # Choix d'appliquer ou non, et facteur, par vidéo
+    apply = torch.rand(B, device=clips.device) < p
+    blocks = torch.randint(block_range[0], block_range[1] + 1, (B,)).tolist()
+
     for b in range(B):
-        if random.random() >= p:
+        if not apply[b]:
             continue
-        for _ in range(10):
-            target_area = random.uniform(*scale) * H * W
-            aspect_ratio = random.uniform(*ratio)
-            h = int(round(math.sqrt(target_area * aspect_ratio)))
-            w = int(round(math.sqrt(target_area / aspect_ratio)))
-            if 0 < w < W and 0 < h < H:
-                i = random.randint(0, H - h)
-                j = random.randint(0, W - w)
-                noise = torch.rand(T, C, h, w, device=clips.device, dtype=clips.dtype)
-                out[b, :, :, i:i + h, j:j + w] = noise
-                break
+        k = blocks[b]
+        small_h, small_w = max(1, H // k), max(1, W // k)
+        v = clips[b].reshape(T * C, 1, H, W)
+        v = F.adaptive_avg_pool2d(v, (small_h, small_w))      # downsample
+        v = F.interpolate(v, size=(H, W), mode="nearest")     # upsample nearest
+        out[b] = v.reshape(T, C, H, W)
 
     return out
 
-
-# =====================================================================
-#   MIXUP ENTRE CLIPS (mélange deux vidéos entières)
-# =====================================================================
 @torch.no_grad()
-def mixup_video(
-    clips: torch.Tensor, labels: torch.Tensor, num_classes: int, alpha: float = 0.2
+def motion_blur_video(
+    clips: torch.Tensor,
+    p: float = 0.3,
+    kernel_size: int = 9,
+) -> torch.Tensor:
+    """Flou directionnel (effet 'mouvement de caméra').
+    Angle et intensité différents par vidéo."""
+    B, T, C, H, W = clips.shape
+    device, dtype = clips.device, clips.dtype
+    K = kernel_size
+    half = K // 2
+
+    # Angle uniforme dans [0, π) par vidéo (π suffit, symétrie de la ligne)
+    angles = torch.rand(B, device=device, dtype=dtype) * math.pi
+    cos, sin = angles.cos(), angles.sin()
+
+    # Coordonnées centrées sur le noyau
+    coords = torch.arange(K, device=device, dtype=dtype) - half        # (K,)
+    yy, xx = torch.meshgrid(coords, coords, indexing="ij")             # (K, K)
+
+    # Distance signée à la ligne passant par le centre, d'angle theta
+    # ligne : x*sin - y*cos = 0  ; on prend exp(-(distance**2)/sigma**2)
+    dist = xx[None] * sin[:, None, None] - yy[None] * cos[:, None, None]  # (B, K, K)
+    kernel2d = torch.exp(-(dist ** 2) / 1.5)
+    kernel2d = kernel2d / kernel2d.sum(dim=(1, 2), keepdim=True)
+
+    # Kernel par (vidéo, canal), conv groupée
+    kernel = kernel2d[:, None, :, :].expand(B, C, K, K).reshape(B * C, 1, K, K)
+    x_in = clips.permute(1, 0, 2, 3, 4).reshape(T, B * C, H, W)
+    blurred = F.conv2d(x_in, kernel, padding=half, groups=B * C)
+    blurred = blurred.reshape(T, B, C, H, W).permute(1, 0, 2, 3, 4).contiguous()
+
+    apply_mask = torch.rand(B, 1, 1, 1, 1, device=device) < p
+    return torch.where(apply_mask, blurred, clips)
+
+@torch.no_grad()
+def label_aware_horizontal_flip(
+    clips: torch.Tensor,
+    labels: torch.Tensor,
+    forbidden_labels: torch.Tensor,
+    p: float = 0.5,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    MixUp entre paires de clips. Retourne (clips_mixés, labels_soft).
-    À utiliser avec une cross-entropy soft (cf. mixup_cross_entropy ci-dessous).
+    """Flip horizontal appliqué à toutes les vidéos SAUF celles dont le label
+    figure dans `forbidden_labels`. Le label reste inchangé pour les vidéos
+    flippées (= classes considérées comme invariantes par symétrie miroir).
+
+    Args:
+        clips:            (B, T, C, H, W)
+        labels:           (B,) entiers
+        forbidden_labels: 1D tensor des labels interdits au flip (ex: [18, 19])
+        p:                proba d'appliquer le flip parmi les vidéos autorisées
     """
     B = clips.shape[0]
-    lam = float(torch.distributions.Beta(alpha, alpha).sample().item())
-    perm = torch.randperm(B, device=clips.device)
+    device = clips.device
 
-    mixed_clips = lam * clips + (1 - lam) * clips[perm]
+    # Masque des vidéos autorisées au flip
+    is_forbidden = torch.isin(labels, forbidden_labels)
+    allowed = ~is_forbidden                                       # (B,)
 
-    one_hot = F.one_hot(labels, num_classes=num_classes).float()
-    mixed_labels = lam * one_hot + (1 - lam) * one_hot[perm]
+    # Décision aléatoire par vidéo, conditionnée
+    should_flip = (torch.rand(B, device=device) < p) & allowed
 
-    return mixed_clips, mixed_labels
+    flipped = torch.flip(clips, dims=[-1])                        # flip de W
+    new_clips = torch.where(should_flip.view(B, 1, 1, 1, 1), flipped, clips)
 
-
-def mixup_cross_entropy(logits: torch.Tensor, soft_targets: torch.Tensor) -> torch.Tensor:
-    """Cross-entropy avec targets soft (one-hot mixé). Compatible label smoothing."""
-    log_probs = F.log_softmax(logits, dim=-1)
-    return -(soft_targets * log_probs).sum(dim=-1).mean()
+    # Labels inchangés (le flip est invariant pour ces classes)
+    return new_clips, labels
 
 
-# =====================================================================
-#   PIPELINE D'AUGMENTATION COMPLET
-# =====================================================================
+
+
+# Buffers ImageNet (calculés une fois, réutilisés)
+_IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
+_IMAGENET_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
+
+
 @torch.no_grad()
 def video_augment(
     clips: torch.Tensor,
+    *,
     flip_prob: float = 0.5,
     crop_prob: float = 0.8,
     crop_scale: Tuple[float, float] = (0.7, 1.0),
@@ -250,38 +204,31 @@ def video_augment(
     color_strength: float = 0.4,
     blur_prob: float = 0.3,
     erase_prob: float = 0.25,
+    normalize: bool = True,
+    mean: torch.Tensor | None = None,
+    std: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
-    Pipeline d'augmentation cohérent temporellement.
-    Toutes les opérations spatiales appliquent les MÊMES paramètres aux T frames
-    d'un même clip ; les paramètres sont indépendants entre clips du batch.
+    Pipeline d'augmentation vidéo cohérent temporellement.
 
-    Ordre : géométrie spatiale → temporel → photométrie → erasing
-    
-    clips : (B, T, C, H, W) en [0, 1]
+    Args:
+        clips : (B, T, C, H, W) en [0, 1] — NON normalisé.
+        normalize : si True, applique mean/std à la fin (par défaut ImageNet).
+
+    Ordre : géométrie spatiale → temporel → photométrie → erasing → normalisation.
     """
-    # 1. Géométrie spatiale
-    if crop_prob > 0 and random.random() < crop_prob:
-        clips = random_resized_crop_video(clips, scale=crop_scale)
-    clips = random_horizontal_flip_video(clips, p=flip_prob)
 
-    # 2. Temporel (désactivé par défaut — n'active que si tes classes sont
-    #    invariantes au sens du temps)
-    if temporal_reverse_prob > 0:
-        clips = random_temporal_reverse(clips, p=temporal_reverse_prob)
+    # 3. Photométrie (en espace [0, 1])
+    clips = color_jitter_video(clips, p=color_prob, strength=color_strength)
+    clips = gaussian_blur_video(clips, p=blur_prob)
 
-    # 3. Photométrie
-    if random.random() < color_prob:
-        clips = color_jitter_video(clips, strength=color_strength)
-    if random.random() < blur_prob:
-        clips = gaussian_blur_video(clips)
-
-    # 4. Erasing (en dernier, sur l'image finale)
-    if erase_prob > 0:
-        clips = random_erasing_video(clips, p=erase_prob)
+    # 5. Normalisation finale, en sortie de pipeline
+    if normalize:
+        m = (mean if mean is not None else _IMAGENET_MEAN).to(clips.device, clips.dtype)
+        s = (std  if std  is not None else _IMAGENET_STD ).to(clips.device, clips.dtype)
+        clips = (clips - m) / s
 
     return clips
-
 
 # =====================================================================
 #   MODEL FACTORY (inchangé)
@@ -370,7 +317,9 @@ def train_one_epoch(
     aug_kwargs: Dict[str, Any] | None = None,
     use_mixup: bool = False,
     mixup_alpha: float = 0.2,
+    use_temporal = True
 ) -> Tuple[float, float]:
+
     """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
     model.train()
     running_loss = 0.0
@@ -386,10 +335,9 @@ def train_one_epoch(
         if use_augment:
             video_batch = video_augment(video_batch, **aug_kwargs)
 
-        # ============ MixUp (mélange entre clips) =========================
-        if use_mixup:
-            video_batch, soft_labels = mixup_video(
-                video_batch, labels, num_classes=num_classes, alpha=mixup_alpha
+        if reverse_lookup is not None and reverse_prob > 0:
+            video_batch, labels = label_aware_temporal_reverse(
+                video_batch, labels, reverse_lookup, p=reverse_prob
             )
 
         optimizer.zero_grad()
