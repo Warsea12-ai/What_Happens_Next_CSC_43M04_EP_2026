@@ -353,7 +353,7 @@ def train_one_epoch(
     mixup_alpha: float = 0.2,
     flip_forbidden: torch.Tensor | None = None,
     flip_prob: float = 0.0,
-    reverse_lookup = torch.Tensor | None = None, 
+    reverse_lookup : torch.Tensor | None = None, 
     reverse_prob: float = 0.5,
 
 ) -> Tuple[float, float]:

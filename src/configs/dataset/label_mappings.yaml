@@ -2,17 +2,17 @@
 # Les paires doivent être SYMÉTRIQUES (si 22→28, alors 28→22).
 # Mettre {N: N} pour les classes invariantes au flip.
 # Toute classe non listée NE SERA PAS flippée.
-flip_forbidden_labels: [18, 19]
+flip_forbidden_labels : [18, 19]
 # Mêmes règles : symétrique, {N: N} si invariant, omis = pas de reverse
 temporal_reverse_map:
-  006 : 007 
-  007 : 006 
-  008 : 009 
-  009 : 008 
-  000 : 010 
-  010 : 000 
-  022 : 028 
-  028 : 022 
-  030 : 030 
-  032 : 003 
-  003 : 032
+   6 :  7 
+   7 :  6 
+   8 :  9 
+   9 :  8 
+   0 : 10 
+   10 :  0 
+   22 : 28 
+   28 : 22 
+   30 : 30 
+   32 :  3 
+   3 : 032

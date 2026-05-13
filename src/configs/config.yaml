@@ -4,6 +4,7 @@ defaults:
   - model: cnn_baseline
   - data: default
   - train: default
+  - dataset : label_mappings 
   - experiment: baseline_from_scratch
   - _self_
 

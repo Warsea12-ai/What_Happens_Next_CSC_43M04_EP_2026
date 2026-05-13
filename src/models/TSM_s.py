@@ -255,13 +255,14 @@ class TSM_s(nn.Module):
         self.use_positional_encoding = use_positional_encoding
         self.temporal_pool = temporal_pool
 
-        # ---- Backbone (TOUJOURS from-scratch ici) -------------------------
         backbone_factory = {
             18: resnet18, 34: resnet34, 50: resnet50,
             101: resnet101, 152: resnet152,
         }
+
         if n_resnet_layers not in backbone_factory:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
+            
         backbone = backbone_factory[n_resnet_layers](weights=None)
 
         # ---- Conv1 modifiée si frame-diff ---------------------------------
