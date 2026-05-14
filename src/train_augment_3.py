@@ -30,7 +30,7 @@ from torch.utils.data import DataLoader
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
-from models.EarlyVit import EarlyVit
+from models.EarlyVit import EarlyVit, early_vit_total_loss
 from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
 from models.TSM_s import TSM_s
@@ -356,7 +356,8 @@ def train_one_epoch(
     flip_prob: float = 0.0,
     reverse_lookup : torch.Tensor | None = None, 
     reverse_prob: float = 0.5,
-    learned_rotation=None
+    learned_rotation=None, 
+    epoch_number = 0 
 ) -> Tuple[float, float]:
 
     """Une epoch d'entraînement. Ordre strict des augmentations :
@@ -397,7 +398,7 @@ def train_one_epoch(
             outputs = model.forward_train(video_batch)
             loss = early_vit_total_loss(
                 outputs, model.prototypes, model.future_proto_predictor,
-                labels, epoch=epoch,
+                labels, epoch=epoch_number,
             )["total"]
             logits = outputs["logits"][:, -1]
         else:
@@ -561,6 +562,7 @@ def main(cfg: DictConfig) -> None:
             use_augment=use_augment, aug_kwargs=aug_kwargs,
             flip_forbidden=flip_forbidden, flip_prob=flip_prob,
             reverse_lookup = reverse_lookup, reverse_prob = reverse_prob,
+            epoch_number = epoch,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
 
