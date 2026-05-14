@@ -392,9 +392,16 @@ def train_one_epoch(
 
         optimizer.zero_grad()
         logits = model(video_batch)
-        loss = loss_fn(logits, labels)
 
-        loss.backward()
+        if cfg.experiment.get("model") == "EarlyVit":
+            loss = early_vit_total_loss(out, model.prototypes,
+                                        model.future_proto_predictor,
+                                        labels, epoch)
+            loss['total'].backward()
+        else : 
+            loss = loss_fn(logits, labels)
+            loss.backward()
+            
         optimizer.step()
 
         running_loss += float(loss.item()) * labels.size(0)
@@ -477,6 +484,7 @@ def main(cfg: DictConfig) -> None:
     model = build_model(cfg).to(device)
 
     label_smoothing = float(cfg.training.get("label_smoothing", 0.1))
+
     loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     weight_decay = float(cfg.training.get("weight_decay", 5e-4))
