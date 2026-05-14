@@ -396,7 +396,7 @@ def train_one_epoch(
 
         optimizer.zero_grad()
 
-        with torch.autocast(device_type="cuda"):
+        with torch.autocast(device_type=str(device), dtype=torch.bfloat16):
             if isinstance(model, EarlyVit):
                 outputs = model.forward_train(video_batch)
                 loss = early_vit_total_loss(
