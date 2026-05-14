@@ -405,7 +405,7 @@ def train_one_epoch(
                 logits = model(video_batch)
                 loss = loss_fn(logits, labels)
 
-        loss.backward()d
+        loss.backward()
         optimizer.step()
 
         running_loss += float(loss.item()) * labels.size(0)
