@@ -1,4 +1,4 @@
-# @package _global_
+d# @package _global_
 training:
   batch_size: 8
   lr: 0.0001

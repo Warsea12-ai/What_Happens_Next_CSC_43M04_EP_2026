@@ -57,24 +57,21 @@ class ResidualTSMBasicBlock(nn.Module):
         self.block = basic_block
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        identity = x
-        if self.block.downsample is not None:
-            identity = self.block.downsample(x)
-
-        if self.training and self.drop_prob > 0.0:
-            if torch.rand(1, device=x.device).item() < self.drop_prob:
-                return F.relu(identity)        # <-- relu non-inplace
+    def forward(self, x):
+        identity = x if self.block.downsample is None else self.block.downsample(x)
 
         out = self.shift(x)
-        out = self.block.conv1(out)
-        out = self.block.bn1(out)
-        out = self.block.relu(out)
-        out = self.block.conv2(out)
-        out = self.block.bn2(out)
+        out = self.block.conv1(out); out = self.block.bn1(out); out = self.block.relu(out)
+        out = self.block.conv2(out); out = self.block.bn2(out)
 
-        out = out + identity                   # <-- pas de +=
-        return F.relu(out)                     # <-- relu non-inplace
+        if self.training and self.drop_prob > 0.0:
+            # Bernoulli par échantillon, asynchrone, avec rescaling
+            keep = 1.0 - self.drop_prob
+            B = out.shape[0]  # ici B = n_batch * n_segment, OK pour la régul
+            mask = torch.empty(B, 1, 1, 1, device=out.device, dtype=out.dtype).bernoulli_(keep)
+            out = out * mask / keep
+
+        return F.relu(out + identity)
 
 
 class ResidualTSMBottleneck(nn.Module):
