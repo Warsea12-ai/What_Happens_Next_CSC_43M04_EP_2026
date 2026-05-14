@@ -300,6 +300,21 @@ class LearnedRotation(nn.Module):
 
         return cropped.reshape(B, T, C, H, W)
 
+# =====================================================================
+#   UTILITAIRE : CHARGER UN MODULE PRÉ-ENTRAÎNÉ
+# =====================================================================
+def load_padding_module(weights_path: str | Path,
+                         channels: int = 3, hidden: int = 64,
+                         context: int = 8,
+                         device: str = "cpu") -> PaddingModule:
+    """Charge un PaddingModule pré-entraîné depuis un .pt"""
+    module = PaddingModule(channels=channels, hidden=hidden, context=context)
+    state = torch.load(weights_path, map_location=device)
+    module.load_state_dict(state)
+    module.to(device).eval()
+    return module
+ 
+
 
 # =====================================================================
 #   TEST RAPIDE

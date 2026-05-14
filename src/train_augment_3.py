@@ -356,7 +356,7 @@ def train_one_epoch(
     flip_prob: float = 0.0,
     reverse_lookup : torch.Tensor | None = None, 
     reverse_prob: float = 0.5,
-
+    learned_rotation=None
 ) -> Tuple[float, float]:
 
     """Une epoch d'entraînement. Ordre strict des augmentations :
