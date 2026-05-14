@@ -7,3 +7,17 @@ training:
   # Where to save the best checkpoint (by validation accuracy)
   checkpoint_path: ${hydra:runtime.cwd}/best_model_A.pt
   device: cuda
+
+  # Padding Module
+  padding_weights_path: ${hydra:runtime.cwd}/padding_module.pt
+  padding_epochs: 5
+  padding_batch_size: 16
+  padding_lr: 1.0e-3
+  padding_hidden: 64
+  padding_context: 8
+  padding_max_samples: 2000
+
+  # LearnedRotation transform
+  use_learned_rotation: true
+  learned_rot_pad_size: 28      # pour ±10° sur 224x224, 28 px suffit largement
+  learned_rot_degrees: 10.0

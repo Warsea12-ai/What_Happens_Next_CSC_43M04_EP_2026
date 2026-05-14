@@ -37,6 +37,7 @@ from models.TSM_s import TSM_s
 from models.TSM_RES import TSMResNet50
 from models.X3D import X3D
 from utils import build_transforms, set_seed, split_train_val
+from models.padding_module import load_padding_module, LearnedRotation
 
 
 # Stats ImageNet, utilisées si on dénormalise en début de pipeline
@@ -369,6 +370,10 @@ def train_one_epoch(
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
 
+        # 0. LEARNED ROTATION (avant tout le reste)
+        if learned_rotation is not None:
+            video_batch = learned_rotation(video_batch)
+
         # 1. FLIP LABEL-AWARE (avant toute autre transfo : il opère sur la
         #    structure géométrique, le reste opère sur les pixels)
         if flip_prob > 0:
@@ -480,6 +485,21 @@ def main(cfg: DictConfig) -> None:
         lr=float(cfg.training.lr),
         weight_decay=weight_decay,
     )
+
+        # Charger le PaddingModule pré-entraîné et créer la transform de rotation
+    padding_weights = Path(cfg.training.get(
+        "padding_weights_path", "padding_module.pt"
+    )).resolve()
+
+    learned_rotation = None
+    if cfg.training.get("use_learned_rotation", False) and padding_weights.exists():
+        padding_module = load_padding_module(padding_weights, device=str(device))
+        learned_rotation = LearnedRotation(
+            padding_module,
+            pad_size=int(cfg.training.get("learned_rot_pad_size", 28)),
+            degrees=float(cfg.training.get("learned_rot_degrees", 10.0)),
+        ).to(device)
+        print(f"  LearnedRotation activée (degrees=±{learned_rotation.degrees})")
 
     # ===== Lecture des hyperparamètres d'augmentation =====
     use_augment = bool(cfg.training.get("use_augment", False))
