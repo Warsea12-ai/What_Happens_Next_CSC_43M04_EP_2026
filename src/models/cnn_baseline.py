@@ -1,4 +1,4 @@
-d"""
+"""
 Track A / Track B: same architecture, `pretrained` flag toggles ImageNet weights.
 
 Forward (conceptually):
