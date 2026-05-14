@@ -1,3 +1,6 @@
+import torch 
+import torch.nn as nn 
+
 class TemporalTransformer(nn.Module):
     """Self-attention sur les frames + CLS pooling."""
 
