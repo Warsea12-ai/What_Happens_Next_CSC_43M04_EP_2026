@@ -32,6 +32,8 @@ from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
 from models.TSM_s import TSM_s
 from models.TSM_RES import TSMResNet50
+from models.cnn_modif import cnn_modif
+from models.cnn_CLS import cnn_CLS 
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -44,6 +46,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
 
     if name == "cnn_baseline":
         return CNNBaseline(num_classes=num_classes, pretrained=pretrained)
+
     if name == "cnn_lstm":
         hidden = cfg.model.get("lstm_hidden_size", 512)
         return CNNLSTM(
@@ -52,6 +55,11 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lstm_hidden_size=int(hidden),
         )
    
+    if name == "cnn_modif":
+        return cnn_modif(num_classes=cfg.model.num_classes,)
+
+    if name == "cnn_CLS":
+        return cnn_CLS(num_classes=cfg.model.num_classes,)
    
     if name == "EarlyVit":
         return EarlyVit(

@@ -24,7 +24,7 @@ class TemporalAttentionPool(nn.Module):
         return self.norm(out.squeeze(1))         # (B, D)
 
 
-class CNNBaseline(nn.Module):
+class cnn_modif(nn.Module):
     def __init__(self, num_classes: int, pretrained: bool = False) -> None:
         super().__init__()
         weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
