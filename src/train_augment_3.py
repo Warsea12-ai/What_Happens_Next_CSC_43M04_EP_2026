@@ -393,15 +393,17 @@ def train_one_epoch(
         optimizer.zero_grad()
         logits = model(video_batch)
 
-        if cfg.experiment.get("model") == "EarlyVit":
-            loss = early_vit_total_loss(out, model.prototypes,
-                                        model.future_proto_predictor,
-                                        labels, epoch)
-            loss['total'].backward()
-        else : 
+        if isinstance(model, EarlyVit):
+            outputs = model.forward_train(video_batch)
+            loss = early_vit_total_loss(
+                outputs, model.prototypes, model.future_proto_predictor,
+                labels, epoch=epoch,
+            )["total"]
+            logits = outputs["logits"][:, -1]
+        else:
+            logits = model(video_batch)
             loss = loss_fn(logits, labels)
-            loss.backward()
-            
+
         optimizer.step()
 
         running_loss += float(loss.item()) * labels.size(0)

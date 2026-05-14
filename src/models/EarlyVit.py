@@ -107,28 +107,21 @@ class EarlyVit(nn.Module):
         feats = self.proj(feats)             # (B*T, 256)
         return feats.reshape(B, T, self.D)   # (B, T, 256)
 
-    def forward(self, clips: torch.Tensor):
-        """
-        clips : (B, T, C, H, W)
-        Renvoie directement les logits (B, K) — prédiction au dernier segment,
-        compatible avec CrossEntropyLoss standard.
-        
-        Les sorties intermédiaires (z, z_last) sont stockées dans self._cache
-        si tu en as besoin plus tard pour les pertes prototypes.
-        """
-        z_enc = self.encode_clips(clips)            # (B, T, D)
-        z = self.decoder(z_enc)                     # (B, T, D)
-        logits_all = self.classifier(z)             # (B, T, K)
-        
-        # On stocke les sorties intermédiaires au cas où (utile pour debug)
-        self._cache = {
-            "logits_all": logits_all,
-            "z": z,
+    def forward_train(self, clips):
+        """Forward pour l'entraînement : renvoie le dict complet."""
+        z_enc      = self.encode_clips(clips)        # (B, T, D)
+        z          = self.decoder(z_enc)             # (B, T, D)
+        logits_all = self.classifier(z)              # (B, T, K)
+        return {
+            "logits": logits_all,                    # (B, T, K) — 3D
+            "z":      z,
             "z_last": z[:, -1],
         }
-        
-        # Renvoie uniquement les logits au dernier segment : (B, K)
-        return logits_all[:, -1]
+
+    def forward(self, clips):
+        """Forward pour l'inférence : renvoie juste (B, K)."""
+        out = self.forward_train(clips)
+        return out["logits"][:, -1]                  # (B, K)
 
     @torch.no_grad()
     def online_step(self, new_frame: torch.Tensor, cache_z_enc=None):
