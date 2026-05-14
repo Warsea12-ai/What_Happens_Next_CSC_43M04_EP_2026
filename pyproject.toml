@@ -14,6 +14,9 @@ dependencies = [
     "gdown>=6.0.0",
     "pytorchvideo>=0.1.5",
     "matplotlib>=3.10.9",
+    "ms-swift>=4.2.0",
+    "qwen-vl-utils>=0.0.6",
+    "decord>=0.6.0",
 ]
 
 [tool.uv]
