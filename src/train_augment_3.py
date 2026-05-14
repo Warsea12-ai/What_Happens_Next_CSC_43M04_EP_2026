@@ -291,6 +291,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
 
     if name == "cnn_baseline":
         return CNNBaseline(num_classes=num_classes, pretrained=pretrained)
+        
     if name == "cnn_lstm":
         return CNNLSTM(
             num_classes=num_classes, pretrained=pretrained,
@@ -298,8 +299,10 @@ def build_model(cfg: DictConfig) -> nn.Module:
         )
     if name == "EarlyVit":
         return EarlyVit(num_classes=num_classes)
+
     if name == "R2Plus1D":
         return R2Plus1D(num_classes=num_classes)
+
     if name == "TSM":
         return TSM(
             num_classes=num_classes,
