@@ -1,5 +1,8 @@
-import torch 
-import torch.nn as nn 
+from __future__ import annotations
+
+import torch
+import torch.nn as nn
+from torchvision import models
 
 class TemporalTransformer(nn.Module):
     """Self-attention sur les frames + CLS pooling."""
@@ -40,7 +43,7 @@ class TemporalTransformer(nn.Module):
         return self.norm(x[:, 0])                     # CLS -> (B, D)
 
 
-class cnnn_CLS(nn.Module):
+class cnn_CLS(nn.Module):
     def __init__(
         self,
         num_classes: int,
