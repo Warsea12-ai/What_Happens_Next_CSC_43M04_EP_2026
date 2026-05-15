@@ -36,6 +36,7 @@ from models.TSM import TSM
 from models.TSM_s import TSM_s
 from models.TSM_RES import TSMResNet50
 from models.X3D import X3D
+from models.Dinov import Dinov 
 from utils import build_transforms, set_seed, split_train_val
 from models.padding_module import load_padding_module, LearnedRotation
 
@@ -339,6 +340,9 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_div=8, dropout=0.5, pretrained=pretrained,
             consensus=cfg.model.get("consensus", "avg"),
         )
+    
+    if name == "Dinov":
+        return Dinov(num_classes=num_classes,)
     raise ValueError(f"Unknown model.name: {name}")
 
 

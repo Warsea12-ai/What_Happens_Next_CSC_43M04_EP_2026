@@ -1,0 +1,6 @@
+# @package _global_
+# Frame CNN + temporal average pooling (Track A: pretrained=false, Track B: pretrained=true)
+model:
+  name: cnn_baseline
+  pretrained: true
+  num_classes: ${num_classes}
