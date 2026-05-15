@@ -62,60 +62,72 @@ class TemporalPositionalEncoding(nn.Module):
 
 class cnn_frame_diff(nn.Module):
     def __init__(
-        self, num_classes: int, 
-        pretrained: bool = False, 
-        use_frame_diff=True, use_positional_encoding = True, 
-        pe_mode: str = "sinusoidal") -> None:
-
+        self, num_classes: int,
+        pretrained: bool = False,
+        use_frame_diff: bool = True,
+        use_positional_encoding: bool = True,
+        pe_mode: str = "sinusoidal",
+    ) -> None:
         super().__init__()
         weights = models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
         backbone = models.resnet18(weights=weights)
 
-        # Replace the original 1000-way ImageNet head with identity; we add our own layer.
-        feature_dim = backbone.fc.in_features  # 512 for ResNet18
+        feature_dim = backbone.fc.in_features
         backbone.fc = nn.Identity()
-
-        self.backbone = backbone
-        self.classifier = nn.Linear(feature_dim, num_classes)
 
         self.use_frame_diff = use_frame_diff
         self.use_positional_encoding = use_positional_encoding
 
-        self.pos_encoding = TemporalPositionalEncoding(
-                num_channels=3,
-                max_len=32,
-                mode=pe_mode,
+        # --- Adapter conv1 pour accepter 6 canaux si frame_diff ---
+        if use_frame_diff:
+            old_conv = backbone.conv1  # Conv2d(3, 64, 7, 2, 3, bias=False)
+            new_conv = nn.Conv2d(
+                in_channels=6,
+                out_channels=old_conv.out_channels,
+                kernel_size=old_conv.kernel_size,
+                stride=old_conv.stride,
+                padding=old_conv.padding,
+                bias=old_conv.bias is not None,
             )
+            if pretrained:
+                with torch.no_grad():
+                    # Canaux 0-2 : poids ImageNet pour la frame brute
+                    new_conv.weight[:, :3] = old_conv.weight
+                    # Canaux 3-5 : on réutilise les mêmes poids pour le diff
+                    # (alternative : .zero_() pour un démarrage neutre)
+                    new_conv.weight[:, 3:] = old_conv.weight
+            backbone.conv1 = new_conv
+
+        self.backbone = backbone
+        self.classifier = nn.Linear(feature_dim, num_classes)
+
+        self.pos_encoding = TemporalPositionalEncoding(
+            num_channels=3, max_len=32, mode=pe_mode,
+        )
 
     def forward(self, video_batch: torch.Tensor) -> torch.Tensor:
-        """
-        video_batch: (batch_size, T, C, H, W)
-        returns logits: (batch_size, num_classes)
-        """
-        batch_size, num_frames, channels, height, width = video_batch.shape
+        B, T, C, H, W = video_batch.shape
 
         if self.use_positional_encoding:
-            video_batch = self.pos_encoding(video_batch)
-
-        # Merge batch and time so the CNN runs frame-wise: (B*T, C, H, W)
-        frames = video_batch.reshape(batch_size * num_frames, channels, height, width)
+            video_batch = self.pos_encoding(video_batch)   # (B, T, 3, H, W)
 
         if self.use_frame_diff:
-            diff = frames[:, 1:] - frames[:, :-1]
-            frames = torch.cat([torch.zeros_like(frames[:, :1]), diff], dim=1)
-            frames = torch.cat([frames, diff], dim=1)        # (B, T, 6, H, W)
-            channels = 6
+            # diff[t] = frame[t] - frame[t-1], diff[0] = 0
+            diff = torch.zeros_like(video_batch)
+            diff[:, 1:] = video_batch[:, 1:] - video_batch[:, :-1]
+            # concat sur l'axe canal -> (B, T, 6, H, W)
+            video_batch = torch.cat([video_batch, diff], dim=2)
+            C = video_batch.size(2)  # 6
 
-        # (B*T, 512, 1, 1) -> (B*T, 512)
+        # Frame-wise: (B*T, C, H, W)
+        frames = video_batch.reshape(B * T, C, H, W)
+
+        # (B*T, 512)
         frame_features = self.backbone(frames)
         frame_features = torch.flatten(frame_features, start_dim=1)
 
-        # Restore temporal structure: (B, T, 512)
-        sequence_features = frame_features.view(batch_size, num_frames, -1)
-
-        # Simple temporal pooling: average over frames -> (B, 512)
+        # (B, T, 512) -> mean -> (B, 512)
+        sequence_features = frame_features.view(B, T, -1)
         pooled_features = sequence_features.mean(dim=1)
 
-        # Class scores: (B, num_classes)
-        logits = self.classifier(pooled_features)
-        return logits
+        return self.classifier(pooled_features)
