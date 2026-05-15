@@ -36,6 +36,7 @@ from models.cnn_modif import cnn_modif
 from models.cnn_CLS import cnn_CLS 
 from models.Dinov import Dinov
 from models.AIMV import AIMV 
+from models.cnn_frame_diff import TemporalPositionalEncoding, cnn_frame_diff
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -118,6 +119,9 @@ def build_model(cfg: DictConfig) -> nn.Module:
 
     if name =="AIMV":
         return AIMV(num_classes=num_classes,)
+
+    if name == "cnn_frame_diff":
+        return cnn_frame_diff(num_classes=num_classes, pretrained=pretrained, pe_mode=cfg.model.get("pe_mode", "sinusoidal"))
 
     raise ValueError(f"Unknown model.name: {name}")
 
