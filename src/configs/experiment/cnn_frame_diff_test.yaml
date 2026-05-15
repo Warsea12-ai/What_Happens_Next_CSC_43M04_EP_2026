@@ -4,6 +4,6 @@ defaults:
   - override /model: cnn_frame_diff.yaml 
 
 model :
-  - pretrained : false
-  - use_frame_diff : true 
-  - use_positional_encoding : true 
+  pretrained : false
+  use_frame_diff : true 
+  use_positional_encoding : true 
