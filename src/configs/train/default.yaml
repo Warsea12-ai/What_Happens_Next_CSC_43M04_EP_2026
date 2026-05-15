@@ -19,7 +19,7 @@ training:
   # LearnedRotation transform
   use_learned_rotation: false         #décisif
   learned_rot_pad_size: 28      
-  learned_rot_degrees: 10.0a
+  learned_rot_degrees: 10.0
 
   use_augment: false                    #décisif
   color_prob: 0.8
