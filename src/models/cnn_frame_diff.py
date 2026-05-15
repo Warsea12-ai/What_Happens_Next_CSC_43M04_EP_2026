@@ -103,7 +103,7 @@ class cnn_frame_diff(nn.Module):
         if self.use_frame_diff:
             diff = frames[:, 1:] - frames[:, :-1]
             frames = torch.cat([torch.zeros_like(frames[:, :1]), diff], dim=1)
-            frames = torch.cat([frames, diff], dim=2)        # (B, T, 6, H, W)
+            frames = torch.cat([frames, diff], dim=1)        # (B, T, 6, H, W)
             channels = 6
 
         # (B*T, 512, 1, 1) -> (B*T, 512)
