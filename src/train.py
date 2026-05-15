@@ -121,7 +121,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
         return AIMV(num_classes=num_classes,)
 
     if name == "cnn_frame_diff":
-        return cnn_frame_diff(num_classes=num_classes, pretrained=pretrained, pe_mode=cfg.model.get("pe_mode", "sinusoidal"))
+        return cnn_frame_diff(num_classes=num_classes, pretrained=pretrained, pe_mode=cfg.model.get("pe_mode", "sinusoidal"), 
+        use_frame_diff=cfg.model.get("use_frame_diff", True), use_positional_encoding=cfg.model.get("use_positional_encoding", True))
 
     raise ValueError(f"Unknown model.name: {name}")
 
