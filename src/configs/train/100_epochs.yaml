@@ -17,18 +17,20 @@ training:
   padding_max_samples: 2000
 
   # LearnedRotation transform
-  use_learned_rotation: true
+  use_learned_rotation: true         #décisif
   learned_rot_pad_size: 28      
   learned_rot_degrees: 10.0
 
-use_augment: true
+use_augment: true                    #décisif
 color_prob: 0.8
 color_strength: 0.4
 blur_prob: 0.15
 motion_blur_prob: 0.15
-pixelation_prob: 0.15      # somme des 3 ≤ 1
-
-flip_prob: 0.5
+pixelation_prob: 0.15      
+flip_prob: 0.5                        #décisif
 
 use_mixup: true
 mixup_alpha: 0.2
+
+#Temporal reverse map 
+use_temporal_map : true                #décisif

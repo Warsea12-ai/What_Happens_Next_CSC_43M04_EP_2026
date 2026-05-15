@@ -360,7 +360,8 @@ def train_one_epoch(
     reverse_lookup : torch.Tensor | None = None, 
     reverse_prob: float = 0.5,
     learned_rotation=None, 
-    epoch_number = 0 
+    epoch_number = 0, 
+    use_temporal_map = False, 
 ) -> Tuple[float, float]:
 
     """Une epoch d'entraînement. Ordre strict des augmentations :
@@ -385,7 +386,7 @@ def train_one_epoch(
                 video_batch, labels, flip_forbidden, p=flip_prob,
             )
         
-        if reverse_lookup is not None and reverse_prob > 0:
+        if reverse_lookup is not None and reverse_prob > 0 and use_temporal_map:
             video_batch, labels = label_aware_temporal_reverse(
                 video_batch, labels, reverse_lookup, p=reverse_prob
             )
@@ -568,7 +569,7 @@ def main(cfg: DictConfig) -> None:
             use_augment=use_augment, aug_kwargs=aug_kwargs,
             flip_forbidden=flip_forbidden, flip_prob=flip_prob,
             reverse_lookup = reverse_lookup, reverse_prob = reverse_prob,
-            epoch_number = epoch,
+            epoch_number = epoch, use_temporal_map = cfg.training.get("use_temporal_map", True)
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
 
