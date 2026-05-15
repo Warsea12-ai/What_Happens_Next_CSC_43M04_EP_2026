@@ -35,6 +35,7 @@ from models.TSM_RES import TSMResNet50
 from models.cnn_modif import cnn_modif
 from models.cnn_CLS import cnn_CLS 
 from models.Dinov import Dinov
+from models.AIMV import AIMV 
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -114,6 +115,9 @@ def build_model(cfg: DictConfig) -> nn.Module:
     
     if name == "Dinov":
         return Dinov(num_classes=num_classes, backbone=cfg.model.get("backbone", "facebook/dinov2-giant"))
+
+    if name =="AIMV":
+        return AIMV(num_classes=num_classes,)
 
     raise ValueError(f"Unknown model.name: {name}")
 
