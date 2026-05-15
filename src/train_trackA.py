@@ -32,6 +32,7 @@ from torch.utils.data import DataLoader
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
+from models.cnn_temporal import CNNTemporal
 from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
 from models.TSM_RES import TSMResNet50
@@ -216,6 +217,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "cnn_baseline":
         return CNNBaseline(num_classes=num_classes, pretrained=pretrained)
 
+    if name == "cnn_temporal":
+        return CNNTemporal(
+            num_classes=num_classes,
+            backbone=cfg.model.get("backbone", "resnet34"),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            head_dim=int(cfg.model.get("head_dim", 512)),
+        )
+
     if name == "cnn_lstm":
         return CNNLSTM(
             num_classes=num_classes, pretrained=pretrained,
@@ -363,13 +372,15 @@ def main(cfg: DictConfig) -> None:
         seed=int(cfg.dataset.seed),
     )
 
+    # Always use ImageNet norm statistics — valid for from-scratch training and
+    # required for the video_augment pipeline (which denormalizes to [0,1] first).
     use_rrc = bool(cfg.training.get("use_random_resized_crop", False))
     train_transform = build_transforms(
         is_training=True,
-        use_imagenet_norm=False,  # Track A: from scratch → no ImageNet norm
+        use_imagenet_norm=True,
         use_random_resized_crop=use_rrc,
     )
-    eval_transform = build_transforms(is_training=False, use_imagenet_norm=False)
+    eval_transform = build_transforms(is_training=False, use_imagenet_norm=True)
 
     train_dataset = VideoFrameDataset(
         root_dir=train_dir, num_frames=int(cfg.dataset.num_frames),
@@ -419,13 +430,13 @@ def main(cfg: DictConfig) -> None:
     # Augmentation config
     use_augment = bool(cfg.training.get("use_augment", True))
     aug_kwargs: Dict[str, Any] = {
-        "color_prob":       float(cfg.training.get("color_prob",       0.8)),
-        "color_strength":   float(cfg.training.get("color_strength",   0.4)),
-        "blur_prob":        float(cfg.training.get("blur_prob",        0.15)),
-        "motion_blur_prob": float(cfg.training.get("motion_blur_prob", 0.15)),
-        "pixelation_prob":  float(cfg.training.get("pixelation_prob",  0.15)),
-        "input_normalized": False,
-        "output_normalized": False,
+        "color_prob":        float(cfg.training.get("color_prob",       0.8)),
+        "color_strength":    float(cfg.training.get("color_strength",   0.4)),
+        "blur_prob":         float(cfg.training.get("blur_prob",        0.15)),
+        "motion_blur_prob":  float(cfg.training.get("motion_blur_prob", 0.15)),
+        "pixelation_prob":   float(cfg.training.get("pixelation_prob",  0.15)),
+        "input_normalized":  True,   # data arrives as ImageNet-normalized [-2,2]
+        "output_normalized": True,   # return ImageNet-normalized for the model
     }
 
     forbidden = list(cfg.dataset.get("flip_forbidden_labels", []))

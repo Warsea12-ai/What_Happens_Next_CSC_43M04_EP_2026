@@ -1,0 +1,8 @@
+# @package _global_
+model:
+  name: cnn_temporal
+  pretrained: false
+  num_classes: ${num_classes}
+  backbone: resnet34
+  dropout: 0.5
+  head_dim: 512
