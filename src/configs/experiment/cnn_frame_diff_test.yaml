@@ -2,3 +2,8 @@
 # Baseline experiment: ResNet18 + temporal average pooling
 defaults:
   - override /model: cnn_frame_diff.yaml 
+
+model :
+  - pretrained : false
+  - use_frame_diff : true 
+  - use_positional_encoding : true 
