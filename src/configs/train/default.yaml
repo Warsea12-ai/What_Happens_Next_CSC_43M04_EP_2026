@@ -2,12 +2,11 @@
 training:
   batch_size: 8
   lr: 0.0001
-  epochs: 5
-  num_workers: 2
+  epochs: 10
+  num_workers: 4
   # Where to save the best checkpoint (by validation accuracy)
-  checkpoint_path: ${hydra:runtime.cwd}/best_model_A.pt
+  checkpoint_path: ${hydra:runtime.cwd}/best_model_${hydra:runtime.choices.experiment}.pt
   device: cuda
-
   # Padding Module
   padding_weights_path: ${hydra:runtime.cwd}/padding_module.pt
   padding_epochs: 5
@@ -18,6 +17,20 @@ training:
   padding_max_samples: 2000
 
   # LearnedRotation transform
-  use_learned_rotation: true
-  learned_rot_pad_size: 28      # pour ±10° sur 224x224, 28 px suffit largement
-  learned_rot_degrees: 10.0
+  use_learned_rotation: false         #décisif
+  learned_rot_pad_size: 28      
+  learned_rot_degrees: 10.0a
+
+use_augment: false                    #décisif
+color_prob: 0.8
+color_strength: 0.4
+blur_prob: 0.15
+motion_blur_prob: 0.15
+pixelation_prob: 0.15      
+flip_prob: 0.5                        #décisif
+
+use_mixup: false
+mixup_alpha: 0.2
+
+#Temporal reverse map 
+use_temporal_map : false                #décisif
