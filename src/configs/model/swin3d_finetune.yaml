@@ -1,0 +1,6 @@
+# @package _global_
+model:
+  name: swin3d_finetune
+  pretrained: true
+  num_classes: ${num_classes}
+  dropout: 0.5
