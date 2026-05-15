@@ -26,6 +26,7 @@ def build_transforms(
     image_size: int = 224,
     is_training: bool = True,
     use_imagenet_norm: bool = True,
+    use_random_resized_crop: bool = False,
 ) -> transforms.Compose:
     """
     Standard torchvision pipeline for single RGB frames.
@@ -33,6 +34,8 @@ def build_transforms(
     use_imagenet_norm:
         True  -> mean/std from ImageNet (usual when pretrained=True)
         False -> still scale to [0,1]; you can swap norms if you prefer
+    use_random_resized_crop:
+        True  -> RandomResizedCrop(scale=(0.6, 1.0)) instead of plain Resize
     """
     if use_imagenet_norm:
         normalize = transforms.Normalize(
@@ -43,9 +46,14 @@ def build_transforms(
         normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 
     if is_training:
+        spatial = (
+            transforms.RandomResizedCrop(image_size, scale=(0.6, 1.0))
+            if use_random_resized_crop
+            else transforms.Resize((image_size, image_size))
+        )
         return transforms.Compose(
             [
-                transforms.Resize((image_size, image_size)),
+                spatial,
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 normalize,

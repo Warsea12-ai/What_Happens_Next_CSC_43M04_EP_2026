@@ -1,0 +1,39 @@
+# @package _global_
+# Track A — Closed World (from scratch, no pretrained weights)
+# Model: TSM with ResNet-34 backbone, residual temporal shift
+# Training: cosine LR + warmup, label smoothing, full augmentation pipeline
+defaults:
+  - override /model: TSM
+
+model:
+  pretrained: false
+  n_resnet_layers: 34
+  fold_div: 8
+  residual_shift: true
+  use_frame_diff: true
+  temporal_pool: attention
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+
+training:
+  epochs: 40
+  lr: 0.001
+  batch_size: 32
+  weight_decay: 5e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-5
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  motion_blur_prob: 0.15
+  pixelation_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
