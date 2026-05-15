@@ -113,7 +113,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
         )
     
     if name == "Dinov":
-        return Dinov(num_classes=num_classes,)
+        return Dinov(num_classes=num_classes, backbone=cfg.model.get("backbone", "facebook/dinov2-giant"))
 
     raise ValueError(f"Unknown model.name: {name}")
 

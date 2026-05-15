@@ -8,7 +8,7 @@ dataset:
   test_dir: ${hydra:runtime.cwd}/processed_data/val2/test
   submission_output: ${hydra:runtime.cwd}/processed_data/val2/submission.csv
 
-  num_frames: 8
+  num_frames: 4
   val_ratio: 0.2
   seed: 42
   max_samples: null
