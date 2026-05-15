@@ -60,7 +60,7 @@ class TemporalPositionalEncoding(nn.Module):
         return video + self.pe[:, :T]
 
 
-class CNNBaseline(nn.Module):
+class cnn_frame_diff(nn.Module):
     def __init__(
         self, num_classes: int, 
         pretrained: bool = False, 
