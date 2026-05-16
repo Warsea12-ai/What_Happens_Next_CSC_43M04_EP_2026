@@ -47,6 +47,7 @@ from models.TSM_RES import TSMResNet50
 from models.X3D import X3D
 from utils import build_transforms, set_seed, split_train_val
 from models.swin3d_finetune import VideoSwinFinetune
+from models.vit_temporal import ViTTemporal
 from torchvision.models.video import mvit_v1_b
 
 
@@ -157,6 +158,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pretrained=bool(cfg.model.pretrained),
             dropout=float(cfg.model.get("dropout", 0.5)),
         )
+
+    if name == "vit_temporal":
+        return ViTTemporal(
+            num_classes=int(cfg.model.num_classes),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            temporal_layers=int(cfg.model.get("temporal_layers", 2)),
+            temporal_heads=int(cfg.model.get("temporal_heads", 8)),
+        )
+
     raise ValueError(f"Unknown model.name: {name}")
 
 

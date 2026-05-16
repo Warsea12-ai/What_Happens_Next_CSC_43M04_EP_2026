@@ -28,6 +28,7 @@ from torch.utils.data import DataLoader
 
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.swin3d_finetune import VideoSwinFinetune
+from models.vit_temporal import ViTTemporal
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -148,6 +149,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_classes=int(cfg.model.num_classes),
             pretrained=bool(cfg.model.pretrained),
             dropout=float(cfg.model.get("dropout", 0.5)),
+        )
+    if name == "vit_temporal":
+        return ViTTemporal(
+            num_classes=int(cfg.model.num_classes),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            temporal_layers=int(cfg.model.get("temporal_layers", 2)),
+            temporal_heads=int(cfg.model.get("temporal_heads", 8)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
@@ -372,6 +381,7 @@ def main(cfg: DictConfig) -> None:
                 "model_name": cfg.model.name,
                 "num_classes": num_classes,
                 "pretrained": bool(cfg.model.pretrained),
+                "use_imagenet_norm": True,  # always True in this script — used by evaluate.py
                 "num_frames": int(cfg.dataset.num_frames),
                 "val_accuracy": val_acc,
                 "config": OmegaConf.to_container(cfg, resolve=True),

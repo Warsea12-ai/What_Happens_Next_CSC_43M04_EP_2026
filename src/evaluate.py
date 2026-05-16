@@ -59,9 +59,11 @@ def main(cfg: DictConfig) -> None:
     raw: Dict[str, Any] = torch.load(checkpoint_path, map_location=device)
     model = load_model_from_checkpoint(raw, device)
 
-    # Normalization must match how the checkpoint was trained (ImageNet stats if pretrained).
-    pretrained_used = bool(raw.get("pretrained", cfg.model.pretrained))
-    eval_transform = build_transforms(is_training=False, use_imagenet_norm=pretrained_used)
+    # Normalization must exactly match what was used during training.
+    # Checkpoints from train_trackA/B.py store use_imagenet_norm explicitly.
+    # Older checkpoints fall back to the pretrained flag (original heuristic).
+    use_imagenet_norm = bool(raw.get("use_imagenet_norm", raw.get("pretrained", cfg.model.pretrained)))
+    eval_transform = build_transforms(is_training=False, use_imagenet_norm=use_imagenet_norm)
 
     val_dir = Path(cfg.dataset.val_dir).resolve()
     val_samples = collect_video_samples(val_dir)

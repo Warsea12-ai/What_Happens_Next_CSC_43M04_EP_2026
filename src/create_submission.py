@@ -172,8 +172,11 @@ def main(cfg: DictConfig) -> None:
     print(f"Model on device: {device}", flush=True)
 
     num_frames = int(ckpt.get("num_frames", cfg.dataset.num_frames))
-    pretrained = bool(ckpt.get("pretrained", cfg.model.pretrained))
-    eval_transform = build_transforms(is_training=False, use_imagenet_norm=pretrained)
+    # Normalization must exactly match what was used during training.
+    # Checkpoints from train_trackA/B.py store use_imagenet_norm explicitly.
+    # Older checkpoints fall back to the pretrained flag (original heuristic).
+    use_imagenet_norm = bool(ckpt.get("use_imagenet_norm", ckpt.get("pretrained", cfg.model.pretrained)))
+    eval_transform = build_transforms(is_training=False, use_imagenet_norm=use_imagenet_norm)
 
     test_root = Path(cfg.dataset.test_dir).resolve()
     output_path = Path(cfg.dataset.submission_output).resolve()

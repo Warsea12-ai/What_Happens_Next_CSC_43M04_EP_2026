@@ -1,0 +1,35 @@
+# @package _global_
+# Track B — ViT-B/16 (ImageNet pretrained) + temporal transformer
+# Why better than Swin3D: Swin3D collapses T=4 → T=1 in early 3D stages.
+# ViT processes each frame independently; all 4 frame tokens reach the temporal head.
+defaults:
+  - override /model: vit_temporal
+
+model:
+  pretrained: true
+  num_frozen_blocks: 8   # fine-tune last 4 of 12 blocks
+  dropout: 0.3
+  temporal_layers: 2
+  temporal_heads: 8
+
+training:
+  epochs: 40
+  lr: 1.0e-4             # head LR (temporal transformer)
+  backbone_lr_scale: 0.1 # last-4-block LR = 1e-5
+  batch_size: 16          # ViT-B + 4 frames needs ~12GB; reduce if OOM
+  weight_decay: 1e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

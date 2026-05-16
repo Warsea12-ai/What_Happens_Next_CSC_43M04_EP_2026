@@ -497,6 +497,7 @@ def main(cfg: DictConfig) -> None:
                 "model_name": cfg.model.name,
                 "num_classes": num_classes,
                 "pretrained": bool(cfg.model.pretrained),
+                "use_imagenet_norm": True,  # always True in this script — used by evaluate.py
                 "num_frames": int(cfg.dataset.num_frames),
                 "val_accuracy": val_acc,
                 "config": OmegaConf.to_container(cfg, resolve=True),

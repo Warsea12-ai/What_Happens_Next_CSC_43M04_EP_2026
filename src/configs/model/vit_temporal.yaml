@@ -1,0 +1,9 @@
+# @package _global_
+model:
+  name: vit_temporal
+  pretrained: true
+  num_classes: ${num_classes}
+  num_frozen_blocks: 8    # freeze first 8 of 12 ViT-B blocks
+  dropout: 0.3
+  temporal_layers: 2
+  temporal_heads: 8
