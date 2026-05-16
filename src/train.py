@@ -16,12 +16,13 @@ split; the dedicated ``dataset.val_dir`` is for ``evaluate.py`` only.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import hydra
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
@@ -58,7 +59,11 @@ def build_model(cfg: DictConfig) -> nn.Module:
     pretrained = cfg.model.pretrained
 
     if name == "cnn_baseline":
-        return CNNBaseline(num_classes=num_classes, pretrained=pretrained)
+        return CNNBaseline(
+            num_classes=num_classes,
+            pretrained=pretrained,
+            pool=cfg.model.get("pool", "avg"),
+        )
     
     if name == "video_transformer":
         return VideoTransformer(
@@ -74,6 +79,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
         return CNNTemporal(
             num_classes=num_classes,
             backbone=cfg.model.get("backbone", "resnet34"),
+            pretrained=pretrained,
             dropout=float(cfg.model.get("dropout", 0.5)),
             head_dim=int(cfg.model.get("head_dim", 512)),
         )
@@ -177,6 +183,7 @@ def train_one_epoch(
     loss_fn: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    clip_grad_norm: float = 0.0,
 ) -> Tuple[float, float]:
     """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
     model.train()
@@ -185,14 +192,15 @@ def train_one_epoch(
     total = 0
 
     for video_batch, labels in data_loader:
-        # video_batch: (B, T, C, H, W), labels: (B,)
         video_batch = video_batch.to(device)
         labels = labels.to(device)
 
         optimizer.zero_grad()
-        logits = model(video_batch)  # (B, num_classes)
+        logits = model(video_batch)
         loss = loss_fn(logits, labels)
         loss.backward()
+        if clip_grad_norm > 0:
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
         optimizer.step()
 
         running_loss += float(loss.item()) * labels.size(0)
@@ -299,22 +307,52 @@ def main(cfg: DictConfig) -> None:
     )
 
     model = build_model(cfg).to(device)
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(cfg.training.lr))
 
+    label_smoothing = float(cfg.training.get("label_smoothing", 0.0))
+    loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+    weight_decay = float(cfg.training.get("weight_decay", 0.0))
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=float(cfg.training.lr),
+        weight_decay=weight_decay,
+    )
+
+    # Optional cosine LR with linear warmup — disabled when warmup_epochs=0 (default).
+    total_epochs  = int(cfg.training.epochs)
+    warmup_epochs = int(cfg.training.get("warmup_epochs", 0))
+    scheduler: Optional[object] = None
+    if warmup_epochs > 0:
+        min_lr = float(cfg.training.get("min_lr", 1e-6))
+        warmup_sched = LinearLR(
+            optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+        )
+        cosine_sched = CosineAnnealingLR(
+            optimizer, T_max=max(1, total_epochs - warmup_epochs), eta_min=min_lr
+        )
+        scheduler = SequentialLR(
+            optimizer, schedulers=[warmup_sched, cosine_sched], milestones=[warmup_epochs]
+        )
+
+    clip_grad_norm = float(cfg.training.get("clip_grad_norm", 0.0))
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
 
-    for epoch in range(int(cfg.training.epochs)):
+    for epoch in range(total_epochs):
         train_loss, train_acc = train_one_epoch(
-            model, train_loader, loss_fn, optimizer, device
+            model, train_loader, loss_fn, optimizer, device,
+            clip_grad_norm=clip_grad_norm,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
+        if scheduler is not None:
+            scheduler.step()
 
+        current_lr = optimizer.param_groups[0]["lr"]
         print(
-            f"Epoch {epoch + 1}/{cfg.training.epochs} | "
+            f"Epoch {epoch + 1}/{total_epochs} | "
             f"train loss {train_loss:.4f} acc {train_acc:.4f} | "
-            f"val loss {val_loss:.4f} acc {val_acc:.4f}"
+            f"val loss {val_loss:.4f} acc {val_acc:.4f} | "
+            f"lr {current_lr:.2e}"
         )
 
         if val_acc > best_val_accuracy:
@@ -324,6 +362,7 @@ def main(cfg: DictConfig) -> None:
                 "model_name": cfg.model.name,
                 "num_classes": int(cfg.model.num_classes),
                 "pretrained": bool(cfg.model.pretrained),
+                "use_imagenet_norm": use_imagenet_norm,
                 "num_frames": int(cfg.dataset.num_frames),
                 "val_accuracy": val_acc,
                 "config": OmegaConf.to_container(cfg, resolve=True),

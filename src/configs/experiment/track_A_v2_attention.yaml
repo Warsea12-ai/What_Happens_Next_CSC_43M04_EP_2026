@@ -1,0 +1,23 @@
+# @package _global_
+# Track A — CNNBaseline learned temporal attention (from scratch)
+# A single Linear(512→1) scores each frame; softmax gives per-frame weights.
+# The model learns which frames are most discriminative (e.g. the last frame
+# for "put down" classes, the first for "pick up"). Only 512 extra parameters.
+defaults:
+  - override /model: cnn_baseline
+
+model:
+  pretrained: false
+  pool: attention
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  batch_size: 64
+  weight_decay: 1e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true

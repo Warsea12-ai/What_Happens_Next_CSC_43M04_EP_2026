@@ -26,21 +26,23 @@ class CNNTemporal(nn.Module):
         self,
         num_classes: int = 33,
         backbone: str = "resnet34",
+        pretrained: bool = False,
         dropout: float = 0.5,
         head_dim: int = 512,
     ) -> None:
         super().__init__()
 
+        from torchvision.models import ResNet18_Weights, ResNet34_Weights, ResNet50_Weights
         backbone_fn = {
-            "resnet18": (models.resnet18, 512),
-            "resnet34": (models.resnet34, 512),
-            "resnet50": (models.resnet50, 2048),
+            "resnet18": (models.resnet18, 512, ResNet18_Weights.IMAGENET1K_V1),
+            "resnet34": (models.resnet34, 512, ResNet34_Weights.IMAGENET1K_V1),
+            "resnet50": (models.resnet50, 2048, ResNet50_Weights.IMAGENET1K_V1),
         }
         if backbone not in backbone_fn:
             raise ValueError(f"backbone must be one of {list(backbone_fn)}")
 
-        fn, feature_dim = backbone_fn[backbone]
-        net = fn(weights=None)
+        fn, feature_dim, weights = backbone_fn[backbone]
+        net = fn(weights=weights if pretrained else None)
         net.fc = nn.Identity()  # type: ignore
         self.backbone = net
         self.feature_dim = feature_dim

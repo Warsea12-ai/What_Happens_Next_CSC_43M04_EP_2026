@@ -1,0 +1,7 @@
+name: videomae
+pretrained: true
+num_classes: ${num_classes}
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+num_frozen_blocks: 8    # freeze first 8 of 12 VideoMAE-Base encoder blocks
+dropout: 0.3
+frames_repeat: 4        # 4 frames × 4 repeat = 16 frames expected by VideoMAE

@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
+from models.videomae import VideoMAEClassifier
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -157,6 +158,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.3)),
             temporal_layers=int(cfg.model.get("temporal_layers", 2)),
             temporal_heads=int(cfg.model.get("temporal_heads", 8)),
+        )
+    if name == "videomae":
+        return VideoMAEClassifier(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            frames_repeat=int(cfg.model.get("frames_repeat", 4)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
