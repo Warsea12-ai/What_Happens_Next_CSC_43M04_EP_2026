@@ -1,17 +1,14 @@
 """
-CNNTemporal — CNN baseline + explicit temporal direction encoding.
+CNNTemporal — CNN backbone + temporal direction encoding.
 
-The CNN baseline (ResNet18 + avg pool) ignores the ORDER of frames.
-For Something-Something style datasets, order is everything:
-"moving left" ≠ "moving right", "picking up" ≠ "putting down".
+Three signals fed to the classifier:
+    global_avg   = mean over all T frames         — spatial content
+    avg_diff     = mean of adjacent frame diffs   — frame-by-frame motion
+    net_dir      = last_frame - first_frame       — overall temporal direction
 
-This model keeps the same stable backbone but adds a direction signal:
-    first_half_avg = avg(frames 0..T//2-1)   — where did we start?
-    second_half_avg = avg(frames T//2..T-1)  — where did we end?
-    direction = second_half - first_half     — what changed?
-
-Concatenating all three gives the classifier an explicit motion vector
-while retaining the full spatial context from each half.
+Adjacent differences (avg_diff) give T-1 independent gradient paths into the
+backbone from the first epoch, unlike the previous first/second half split which
+provided only one coarse difference signal after the backbone had converged.
 
 Input : (B, T, C, H, W)
 Output: (B, num_classes)
@@ -61,21 +58,18 @@ class CNNTemporal(nn.Module):
         self._init_weights()
 
     def _init_weights(self) -> None:
-        # Small init on classifier so logits start near uniform
         nn.init.trunc_normal_(self.head[-1].weight, std=0.01)
         nn.init.zeros_(self.head[-1].bias)
 
     def forward(self, video_batch: torch.Tensor) -> torch.Tensor:
         B, T, C, H, W = video_batch.shape
 
-        # Shared backbone over all frames
         feats = self.backbone(video_batch.reshape(B * T, C, H, W))  # (B*T, D)
         feats = feats.view(B, T, self.feature_dim)                  # (B, T, D)
 
-        mid = T // 2 or 1  # guard against T=1
-        first_half  = feats[:, :mid].mean(dim=1)        # (B, D) — beginning
-        second_half = feats[:, mid:].mean(dim=1)        # (B, D) — end
-        direction   = second_half - first_half          # (B, D) — motion vector
+        global_avg = feats.mean(dim=1)                  # (B, D) — content
+        avg_diff   = (feats[:, 1:] - feats[:, :-1]).mean(dim=1)  # (B, D) — motion
+        net_dir    = feats[:, -1] - feats[:, 0]         # (B, D) — overall direction
 
-        combined = torch.cat([first_half, second_half, direction], dim=1)  # (B, 3D)
+        combined = torch.cat([global_avg, avg_diff, net_dir], dim=1)  # (B, 3D)
         return self.head(combined)
