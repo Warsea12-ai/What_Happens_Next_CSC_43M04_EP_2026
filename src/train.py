@@ -42,6 +42,7 @@ from models.cnn_frame_diff import TemporalPositionalEncoding, cnn_frame_diff
 from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
 from models.cnn_temporal import CNNTemporal
+from models.cnn_hybrid import CNNHybrid
 from models.video_transformer import VideoTransformer
 from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
@@ -159,6 +160,24 @@ def video_augment(
     return clips
 
 
+@torch.no_grad()
+def mixup_batch(
+    clips: torch.Tensor, labels: torch.Tensor,
+    alpha: float = 0.2, num_classes: int = 33,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """MixUp: blends pairs of samples and returns soft labels."""
+    lam = float(torch.distributions.Beta(alpha, alpha).sample())
+    B = clips.shape[0]
+    idx = torch.randperm(B, device=clips.device)
+    mixed_clips = lam * clips + (1 - lam) * clips[idx]
+    # Soft one-hot labels
+    y = torch.zeros(B, num_classes, device=clips.device)
+    y.scatter_(1, labels.unsqueeze(1), 1.0)
+    y_perm = y[idx]
+    mixed_labels = lam * y + (1 - lam) * y_perm
+    return mixed_clips, mixed_labels
+
+
 def build_model(cfg: DictConfig) -> nn.Module:
     """Create the model described by cfg.model.name."""
     name = cfg.model.name
@@ -180,6 +199,17 @@ def build_model(cfg: DictConfig) -> nn.Module:
             nhead=int(cfg.model.get("nhead", 4)),
             num_layers=int(cfg.model.get("num_layers", 2)),
             dropout=float(cfg.model.get("dropout", 0.3)),
+        )
+
+    if name == "cnn_hybrid":
+        return CNNHybrid(
+            num_classes=num_classes,
+            backbone=cfg.model.get("backbone", "resnet34"),
+            d_model=int(cfg.model.get("d_model", 256)),
+            nhead=int(cfg.model.get("nhead", 4)),
+            num_layers=int(cfg.model.get("num_layers", 2)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_dim=int(cfg.model.get("head_dim", 512)),
         )
 
     if name == "cnn_temporal":
@@ -299,6 +329,9 @@ def train_one_epoch(
     reverse_prob: float = 0.5,
     use_temporal_map: bool = False,
     use_imagenet_norm: bool = False,
+    use_mixup: bool = False,
+    mixup_alpha: float = 0.2,
+    num_classes: int = 33,
 ) -> Tuple[float, float]:
     """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
     model.train()
@@ -327,10 +360,21 @@ def train_one_epoch(
                 **aug_kwargs,
             )
 
+        soft_labels = None
+        if use_mixup:
+            video_batch, soft_labels = mixup_batch(
+                video_batch, labels, alpha=mixup_alpha, num_classes=num_classes,
+            )
+
         optimizer.zero_grad()
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
             logits = model(video_batch)
-            loss = loss_fn(logits, labels)
+            if soft_labels is not None:
+                # Soft cross-entropy: -sum(soft_labels * log_softmax(logits))
+                log_probs = torch.nn.functional.log_softmax(logits.float(), dim=1)
+                loss = -(soft_labels * log_probs).sum(dim=1).mean()
+            else:
+                loss = loss_fn(logits, labels)
 
         loss.backward()
         if clip_grad_norm > 0:
@@ -339,7 +383,8 @@ def train_one_epoch(
 
         running_loss += float(loss.item()) * labels.size(0)
         predictions = logits.argmax(dim=1)
-        correct += int((predictions == labels).sum().item())
+        hard_labels = soft_labels.argmax(dim=1) if soft_labels is not None else labels
+        correct += int((predictions == hard_labels).sum().item())
         total += labels.size(0)
 
     average_loss = running_loss / max(total, 1)
@@ -491,6 +536,9 @@ def main(cfg: DictConfig) -> None:
     reverse_prob = float(cfg.training.get("equivariant_reverse_prob", 0.5))
     use_temporal_map = bool(cfg.training.get("use_temporal_map", False))
 
+    use_mixup   = bool(cfg.training.get("use_mixup",    False))
+    mixup_alpha = float(cfg.training.get("mixup_alpha", 0.2))
+
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
 
@@ -507,6 +555,9 @@ def main(cfg: DictConfig) -> None:
             reverse_prob=reverse_prob,
             use_temporal_map=use_temporal_map,
             use_imagenet_norm=use_imagenet_norm,
+            use_mixup=use_mixup,
+            mixup_alpha=mixup_alpha,
+            num_classes=num_classes,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
         if scheduler is not None:

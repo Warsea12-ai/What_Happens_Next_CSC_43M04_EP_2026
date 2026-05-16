@@ -176,6 +176,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             frames_repeat=int(cfg.model.get("frames_repeat", 4)),
+            use_linear_interp=bool(cfg.model.get("use_linear_interp", True)),
         )
     if name == "motion_videomae":
         return MotionVideoMAE(

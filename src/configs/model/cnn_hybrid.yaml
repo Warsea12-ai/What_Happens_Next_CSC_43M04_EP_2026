@@ -1,0 +1,10 @@
+model:
+  name: cnn_hybrid
+  pretrained: false
+  num_classes: ${num_classes}
+  backbone: resnet34
+  d_model: 256
+  nhead: 4
+  num_layers: 2
+  dropout: 0.3
+  head_dim: 512

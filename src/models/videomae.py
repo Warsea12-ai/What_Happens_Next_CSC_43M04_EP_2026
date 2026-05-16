@@ -21,6 +21,21 @@ _IN_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
 _VM_MEAN = torch.tensor([0.5, 0.5, 0.5]).view(1, 1, 3, 1, 1)
 _VM_STD  = torch.tensor([0.5, 0.5, 0.5]).view(1, 1, 3, 1, 1)
 
+_TARGET_FRAMES = 16
+
+
+def _linear_upsample(x: torch.Tensor, target_T: int) -> torch.Tensor:
+    """Linearly interpolate (B, T, C, H, W) along the time axis to target_T."""
+    B, T, C, H, W = x.shape
+    if T == target_T:
+        return x
+    device, dtype = x.device, x.dtype
+    t_src  = torch.linspace(0, T - 1, target_T, device=device, dtype=dtype)
+    t_low  = t_src.floor().long().clamp(0, T - 2)
+    t_high = (t_low + 1).clamp(0, T - 1)
+    alpha  = (t_src - t_low.to(dtype)).view(1, target_T, 1, 1, 1)
+    return x[:, t_low] + alpha * (x[:, t_high] - x[:, t_low])
+
 
 class VideoMAEClassifier(nn.Module):
     def __init__(
@@ -30,9 +45,11 @@ class VideoMAEClassifier(nn.Module):
         num_frozen_blocks: int = 8,
         dropout: float = 0.3,
         frames_repeat: int = 4,
+        use_linear_interp: bool = True,
     ) -> None:
         super().__init__()
         self.frames_repeat = frames_repeat
+        self.use_linear_interp = use_linear_interp
 
         self.model = VideoMAEForVideoClassification.from_pretrained(
             backbone,
@@ -87,8 +104,11 @@ class VideoMAEClassifier(nn.Module):
         s_vm = _VM_STD.to(device, dtype)
         x = (x * s_in + m_in - m_vm) / s_vm
 
-        # Expand T=4 → T*frames_repeat=16 by repeating each frame
-        x = x.unsqueeze(2).expand(B, T, self.frames_repeat, C, H, W)
-        x = x.reshape(B, T * self.frames_repeat, C, H, W)
+        # Expand T=4 → 16 frames
+        if self.use_linear_interp:
+            x = _linear_upsample(x, _TARGET_FRAMES)
+        else:
+            x = x.unsqueeze(2).expand(B, T, self.frames_repeat, C, H, W)
+            x = x.reshape(B, T * self.frames_repeat, C, H, W)
 
         return self.model(pixel_values=x).logits
