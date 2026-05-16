@@ -1,0 +1,6 @@
+name: motion_videomae
+pretrained: true
+num_classes: ${num_classes}
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+num_frozen_blocks: 8    # freeze first 8 of 12 blocks; fine-tune last 4
+dropout: 0.3

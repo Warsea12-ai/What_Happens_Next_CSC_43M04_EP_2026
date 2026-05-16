@@ -30,6 +30,7 @@ from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
 from models.videomae import VideoMAEClassifier
+from models.motion_videomae import MotionVideoMAE
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -166,6 +167,13 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             frames_repeat=int(cfg.model.get("frames_repeat", 4)),
+        )
+    if name == "motion_videomae":
+        return MotionVideoMAE(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
