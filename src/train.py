@@ -37,6 +37,14 @@ from models.cnn_CLS import cnn_CLS
 from models.Dinov import Dinov
 from models.AIMV import AIMV 
 from models.cnn_frame_diff import TemporalPositionalEncoding, cnn_frame_diff
+from models.cnn_baseline import CNNBaseline
+from models.cnn_lstm import CNNLSTM
+from models.cnn_temporal import CNNTemporal
+from models.video_transformer import VideoTransformer
+from models.R2Plus1D import R2Plus1D
+from models.TSM import TSM
+from models.TSM_RES import TSMResNet50
+from models.X3D import X3D
 from utils import build_transforms, set_seed, split_train_val
 from torchvision.models.video import mvit_v1_b
 
@@ -49,6 +57,24 @@ def build_model(cfg: DictConfig) -> nn.Module:
 
     if name == "cnn_baseline":
         return CNNBaseline(num_classes=num_classes, pretrained=pretrained)
+    
+    if name == "video_transformer":
+        return VideoTransformer(
+            num_classes=num_classes,
+            backbone=cfg.model.get("backbone", "resnet34"),
+            d_model=int(cfg.model.get("d_model", 256)),
+            nhead=int(cfg.model.get("nhead", 4)),
+            num_layers=int(cfg.model.get("num_layers", 2)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+        )
+
+    if name == "cnn_temporal":
+        return CNNTemporal(
+            num_classes=num_classes,
+            backbone=cfg.model.get("backbone", "resnet34"),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            head_dim=int(cfg.model.get("head_dim", 512)),
+        )
 
     if name == "cnn_lstm":
         hidden = cfg.model.get("lstm_hidden_size", 512)
