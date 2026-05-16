@@ -6,9 +6,9 @@ defaults:
   - override /model: cnn_temporal
 
 model:
-  backbone: resnet34
+  backbone: resnet18
   dropout: 0.5
-  head_dim: 512
+  head_dim: 256
 
 training:
   epochs: 80

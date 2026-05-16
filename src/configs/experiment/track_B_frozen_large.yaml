@@ -1,0 +1,38 @@
+# @package _global_
+# Track B — VideoMAE-Large (307M) with fully frozen backbone, head-only training.
+#
+# Why frozen + large beats partial fine-tune + base:
+#   - 4× more parameters in backbone → richer spatial/temporal features
+#   - Freezing removes gradient noise from 307M params → head trains on clean signal
+#   - No risk of catastrophic forgetting: Kinetics pretraining preserved
+#   - Batch=64 fits in 25 GB (no activation storage for backprop through backbone)
+#
+# Head: [global, first, last, delta] (4×1024=4096) → Linear(4096,2048) → Linear(2048,33)
+# delta = last_temporal_feat − first_temporal_feat = net motion direction
+defaults:
+  - override /model: frozen_videomae
+
+model:
+  dropout: 0.5
+
+training:
+  epochs: 80
+  lr: 5.0e-4             # head only — can be aggressive, no backbone to protect
+  backbone_lr_scale: 0.0 # backbone is frozen; this field is unused but kept for compat
+  batch_size: 64         # large batch safe: no backprop through 307M params
+  weight_decay: 1e-3     # stronger regularisation — head sees the same features every epoch
+  label_smoothing: 0.15  # slightly higher smoothing to prevent head overfitting
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4    # stronger jitter — backbone frozen so augmentation is the main regulariser
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

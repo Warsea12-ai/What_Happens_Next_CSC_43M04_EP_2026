@@ -9,12 +9,12 @@ defaults:
   - override /model: cnn_hybrid
 
 model:
-  backbone: resnet34
-  d_model: 256
+  backbone: resnet18
+  d_model: 128
   nhead: 4
-  num_layers: 2
-  dropout: 0.3
-  head_dim: 512
+  num_layers: 1
+  dropout: 0.4
+  head_dim: 256
 
 training:
   epochs: 80

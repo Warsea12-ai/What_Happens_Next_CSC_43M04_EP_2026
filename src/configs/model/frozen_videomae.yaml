@@ -1,0 +1,5 @@
+name: frozen_videomae
+pretrained: true
+num_classes: ${num_classes}
+backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+dropout: 0.5

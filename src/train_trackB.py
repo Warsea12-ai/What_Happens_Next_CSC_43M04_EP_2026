@@ -32,6 +32,7 @@ from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
 from models.videomae import VideoMAEClassifier
 from models.motion_videomae import MotionVideoMAE
+from models.frozen_videomae import FrozenVideoMAELarge
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -185,6 +186,12 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
         )
+    if name == "frozen_videomae":
+        return FrozenVideoMAELarge(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+        )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
 
@@ -205,11 +212,12 @@ def build_optimizer(model: nn.Module, cfg: DictConfig) -> torch.optim.Optimizer:
             backbone_lr=base_lr * backbone_scale,
             llrd=llrd,
         )
-    elif hasattr(model, "backbone_parameters") and hasattr(model, "head_parameters"):
-        param_groups = [
-            {"params": model.backbone_parameters(), "lr": base_lr * backbone_scale},
-            {"params": model.head_parameters(),     "lr": base_lr},
-        ]
+    elif hasattr(model, "head_parameters"):
+        # head_parameters() always present; backbone_parameters() may return [] (frozen model)
+        backbone_params = model.backbone_parameters() if hasattr(model, "backbone_parameters") else []
+        param_groups = [{"params": model.head_parameters(), "lr": base_lr}]
+        if backbone_params:
+            param_groups.append({"params": backbone_params, "lr": base_lr * backbone_scale})
     else:
         param_groups = [{"params": model.parameters(), "lr": base_lr}]
 
