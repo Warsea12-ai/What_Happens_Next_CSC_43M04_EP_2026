@@ -7,19 +7,19 @@ defaults:
 
 model:
   pretrained: true
-  num_frozen_blocks: 8   # fine-tune last 4 of 12 blocks
+  num_frozen_blocks: 6   # fine-tune last 6 of 12 blocks (was 8→4 too few to adapt to direction)
   dropout: 0.3
   temporal_layers: 2
   temporal_heads: 8
 
 training:
-  epochs: 40
+  epochs: 50
   lr: 1.0e-4             # head LR (temporal transformer)
-  backbone_lr_scale: 0.1 # last-4-block LR = 1e-5
+  backbone_lr_scale: 0.1 # last-6-block LR = 1e-5
   batch_size: 16          # ViT-B + 4 frames needs ~12GB; reduce if OOM
   weight_decay: 1e-4
   label_smoothing: 0.1
-  warmup_epochs: 10
+  warmup_epochs: 5        # was 10 — pretrained model doesn't need long warmup
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 

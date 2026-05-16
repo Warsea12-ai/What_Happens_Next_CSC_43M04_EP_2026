@@ -318,7 +318,7 @@ def main(cfg: DictConfig) -> None:
     warmup_epochs = int(cfg.training.get("warmup_epochs", 10))
     min_lr = float(cfg.training.get("min_lr", 1e-6))
     warmup_sched = LinearLR(
-        optimizer, start_factor=0.01, end_factor=1.0, total_iters=warmup_epochs
+        optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
     )
     cosine_sched = CosineAnnealingLR(
         optimizer, T_max=max(1, total_epochs - warmup_epochs), eta_min=min_lr

@@ -120,17 +120,30 @@ class ViTTemporal(nn.Module):
 
     def forward(self, video_batch: torch.Tensor) -> torch.Tensor:
         B, T, C, H, W = video_batch.shape
+        x = video_batch.reshape(B * T, C, H, W)
 
-        # Per-frame CLS tokens via shared ViT backbone
-        frame_feats = self.vit(video_batch.reshape(B * T, C, H, W))  # (B*T, 768)
-        frame_feats = frame_feats.view(B, T, _VIT_DIM)               # (B, T, 768)
+        # Run the ViT encoder directly to get patch tokens.
+        # The CLS token (optimised for ImageNet object recognition) produces nearly
+        # identical vectors for "moving left" vs "moving right" because scene
+        # composition is the same in both.  Patch tokens are position-specific:
+        # the patch on the left side of frame 4 carries different content for
+        # "moving right" vs "moving left", so their spatial average gives the
+        # temporal transformer a direct signal about where the object ended up.
+        x = self.vit._process_input(x)                              # (B*T, N, 768)
+        n = x.shape[0]
+        batch_cls = self.vit.class_token.expand(n, -1, -1)
+        x = torch.cat([batch_cls, x], dim=1)                        # (B*T, N+1, 768)
+        x = self.vit.encoder(x)                                     # (B*T, N+1, 768)
+
+        # Average pool patch tokens (index 0 is CLS, skip it)
+        frame_feats = x[:, 1:].mean(dim=1).view(B, T, _VIT_DIM)    # (B, T, 768)
 
         # Add temporal positional encoding
         frame_feats = frame_feats + self.temporal_pe[:, :T]
 
         # Prepend CLS token and apply temporal transformer
-        cls = self.cls_token.expand(B, -1, -1)                       # (B, 1, 768)
-        tokens = torch.cat([cls, frame_feats], dim=1)                # (B, T+1, 768)
-        out = self.temporal(tokens)                                   # (B, T+1, 768)
+        cls = self.cls_token.expand(B, -1, -1)                      # (B, 1, 768)
+        tokens = torch.cat([cls, frame_feats], dim=1)               # (B, T+1, 768)
+        out = self.temporal(tokens)                                  # (B, T+1, 768)
 
-        return self.head(out[:, 0])                                   # (B, num_classes)
+        return self.head(out[:, 0])                                  # (B, num_classes)
