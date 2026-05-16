@@ -46,6 +46,7 @@ from models.TSM import TSM
 from models.TSM_RES import TSMResNet50
 from models.X3D import X3D
 from utils import build_transforms, set_seed, split_train_val
+from models.swin3d_finetune import VideoSwinFinetune
 from torchvision.models.video import mvit_v1_b
 
 
