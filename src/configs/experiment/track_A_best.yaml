@@ -1,7 +1,11 @@
 # @package _global_
 # Track A — Closed World (from scratch, no pretrained weights)
 # Model: TSM with ResNet-34 backbone, residual temporal shift
-# Training: cosine LR + warmup, label smoothing, full augmentation pipeline
+#
+# Augmentation rationale: heavy color jitter + blur hurts from-scratch training
+# because the backbone has no prior and needs stable gradients to learn basic
+# visual features first. Only keep mild color jitter + spatial augmentations.
+# Temporal equivariance (flip + reverse) stays — it's free label-consistent signal.
 defaults:
   - override /model: TSM
 
@@ -16,23 +20,23 @@ model:
   pe_mode: sinusoidal
 
 training:
-  epochs: 40
-  lr: 0.001
-  batch_size: 32
-  weight_decay: 5e-4
+  epochs: 80               # from-scratch needs more iterations than fine-tuning
+  lr: 5.0e-4               # lower than before — AdamW + random init benefits from gentler start
+  batch_size: 64           # larger batch = more stable BatchNorm statistics
+  weight_decay: 1e-4
   label_smoothing: 0.1
-  warmup_epochs: 5
-  min_lr: 1.0e-5
+  warmup_epochs: 10
+  min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
 
   use_augment: true
-  color_prob: 0.8
-  color_strength: 0.4
-  blur_prob: 0.15
-  motion_blur_prob: 0.15
-  pixelation_prob: 0.15
+  color_prob: 0.5          # mild color jitter only
+  color_strength: 0.15     # was 0.4 — too aggressive for from-scratch
+  blur_prob: 0.0           # disabled: corrupts low-level features before backbone converges
+  motion_blur_prob: 0.0
+  pixelation_prob: 0.0
 
   flip_prob: 0.5
   use_temporal_map: true
