@@ -45,9 +45,13 @@ class CNNTemporal(nn.Module):
         self.backbone = net
         self.feature_dim = feature_dim
 
-        # Two-layer head: 3×D → head_dim → num_classes
+        # Separate LayerNorms per signal so direction components (which are small
+        # in magnitude for similar frames) are not drowned out by content components
+        # when feeding into the linear head.
+        self.ln_content   = nn.LayerNorm(feature_dim)
+        self.ln_direction = nn.LayerNorm(feature_dim)
+
         self.head = nn.Sequential(
-            nn.LayerNorm(3 * feature_dim),
             nn.Dropout(dropout),
             nn.Linear(3 * feature_dim, head_dim),
             nn.GELU(),
@@ -71,5 +75,9 @@ class CNNTemporal(nn.Module):
         avg_diff   = (feats[:, 1:] - feats[:, :-1]).mean(dim=1)  # (B, D) — motion
         net_dir    = feats[:, -1] - feats[:, 0]         # (B, D) — overall direction
 
-        combined = torch.cat([global_avg, avg_diff, net_dir], dim=1)  # (B, 3D)
+        combined = torch.cat([
+            self.ln_content(global_avg),
+            self.ln_direction(avg_diff),
+            self.ln_direction(net_dir),
+        ], dim=1)  # (B, 3D)
         return self.head(combined)
