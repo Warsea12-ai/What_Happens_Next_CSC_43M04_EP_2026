@@ -27,6 +27,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
+from models.cnn_temporal import CNNTemporal
 from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
 from models.videomae import VideoMAEClassifier
@@ -146,6 +147,14 @@ def video_augment(
 
 def build_model(cfg: DictConfig) -> nn.Module:
     name = cfg.model.name
+    if name == "cnn_temporal":
+        return CNNTemporal(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "resnet34")),
+            pretrained=bool(cfg.model.pretrained),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_dim=int(cfg.model.get("head_dim", 512)),
+        )
     if name == "swin3d_finetune":
         return VideoSwinFinetune(
             num_classes=int(cfg.model.num_classes),
@@ -184,8 +193,18 @@ def build_optimizer(model: nn.Module, cfg: DictConfig) -> torch.optim.Optimizer:
     base_lr = float(cfg.training.lr)
     backbone_scale = float(cfg.training.get("backbone_lr_scale", 0.1))
     weight_decay = float(cfg.training.get("weight_decay", 1e-4))
+    llrd = float(cfg.training.get("llrd_factor", 0.0))  # 0 = disabled
 
-    if hasattr(model, "backbone_parameters") and hasattr(model, "head_parameters"):
+    # Layer-wise LR decay: each transformer block gets a geometrically smaller LR
+    # moving from the top of the network toward the bottom. This prevents early
+    # (more general) layers from being over-trained while adapting later layers.
+    if llrd > 0 and hasattr(model, "layerwise_lr_groups"):
+        param_groups = model.layerwise_lr_groups(
+            head_lr=base_lr,
+            backbone_lr=base_lr * backbone_scale,
+            llrd=llrd,
+        )
+    elif hasattr(model, "backbone_parameters") and hasattr(model, "head_parameters"):
         param_groups = [
             {"params": model.backbone_parameters(), "lr": base_lr * backbone_scale},
             {"params": model.head_parameters(),     "lr": base_lr},

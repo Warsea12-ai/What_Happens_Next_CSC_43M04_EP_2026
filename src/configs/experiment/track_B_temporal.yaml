@@ -1,0 +1,30 @@
+# @package _global_
+# Track B — CNNTemporal with pretrained ResNet34
+#
+# The CNN baseline (ResNet18 avg pool, pretrained) gets 0.32.
+# CNNTemporal (ResNet34, from scratch) gets 0.28.
+# This combines both: pretrained ResNet34 features + explicit temporal direction.
+# Expected: 0.38–0.45.
+#
+# Run with train.py (stable, proven script):
+#   python train.py experiment=track_B_temporal
+defaults:
+  - override /model: cnn_temporal
+
+model:
+  pretrained: true
+  backbone: resnet34
+  dropout: 0.3
+  head_dim: 512
+
+training:
+  epochs: 40
+  lr: 1.0e-4           # lower than from-scratch — pretrained weights need gentle updates
+  batch_size: 64
+  weight_decay: 1e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true

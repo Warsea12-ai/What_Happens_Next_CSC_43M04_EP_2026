@@ -1,12 +1,13 @@
 # @package _global_
-# Track B — MotionVideoMAE: VideoMAE-Base (SSv2-pretrained) with motion-aware head.
+# Track B — MotionVideoMAE with layer-wise LR decay.
 #
-# Key differences from plain VideoMAE fine-tuning:
-#   - Linear temporal interpolation 4→16 (not naive frame repetition)
-#   - Head sees [global_pool, delta] where delta = last_feat − first_feat
-#   - delta directly encodes motion direction: critical for temporal-reverse class pairs
+# Architecture: VideoMAE-Base (SSv2-pretrained) + motion-aware head.
+#   Head input: [global_pool, first_temporal, last_temporal, delta] (4×768)
+#   delta = last_temporal_feat − first_temporal_feat = net motion direction
+#   This directly encodes the temporal direction signal needed for reverse-pair classes.
 #
-# Differential LR: backbone_lr_scale=0.05 (very gentle — backbone already SSv2-adapted)
+# LLRD: backbone blocks decay geometrically from block 11 (backbone_lr) toward block 8.
+#   block 11: 2e-5   block 10: 1.5e-5   block 9: 1.1e-5   block 8: 8.4e-6
 defaults:
   - override /model: motion_videomae
 
@@ -16,9 +17,10 @@ model:
 
 training:
   epochs: 40
-  lr: 5.0e-4             # head + norm LR (small head — can afford higher LR)
-  backbone_lr_scale: 0.02  # last-4-block backbone: 1e-5 — protect SSv2 pretraining
-  batch_size: 16         # 4 frames on disk → 16 internally: same peak memory as T=4
+  lr: 3.0e-4              # head + norm LR
+  backbone_lr_scale: 0.067 # top block gets lr × 0.067 ≈ 2e-5
+  llrd_factor: 0.75        # each block below gets × 0.75 of the one above
+  batch_size: 16
   weight_decay: 5e-4
   label_smoothing: 0.1
   warmup_epochs: 5
