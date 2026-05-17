@@ -316,7 +316,21 @@ class TSM_s(nn.Module):
             self.attn = nn.Linear(in_features, 1)
 
         # ---- Tête de classification ---------------------------------------
-        if head_hidden:
+        if temporal_pool == "motion":
+            # Motion-aware head: [global, first, last, delta] → 4*D → 512 → num_classes
+            # Separate LayerNorms keep each feature type well-scaled before concat.
+            self.norm_global = nn.LayerNorm(in_features)
+            self.norm_first  = nn.LayerNorm(in_features)
+            self.norm_last   = nn.LayerNorm(in_features)
+            self.norm_delta  = nn.LayerNorm(in_features)
+            self.head = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(4 * in_features, 512),
+                nn.GELU(),
+                nn.Dropout(dropout * 0.5),
+                nn.Linear(512, num_classes),
+            )
+        elif head_hidden:
             self.head = nn.Sequential(
                 nn.Dropout(dropout),
                 nn.Linear(in_features, in_features // 2),
@@ -372,6 +386,17 @@ class TSM_s(nn.Module):
             feats = (feats * w).sum(dim=1)                 # (B, D)
         elif self.temporal_pool == "last":
             feats = feats[:, -1]
+        elif self.temporal_pool == "motion":
+            global_f = feats.mean(dim=1)                   # (B, D) — scene context
+            first    = feats[:, 0]                         # (B, D) — initial state
+            last     = feats[:, -1]                        # (B, D) — final state
+            delta    = last - first                        # (B, D) — net motion
+            feats = torch.cat([
+                self.norm_global(global_f),
+                self.norm_first(first),
+                self.norm_last(last),
+                self.norm_delta(delta),
+            ], dim=1)                                      # (B, 4*D)
         else:
             raise ValueError(f"Unknown temporal_pool: {self.temporal_pool}")
 

@@ -1,0 +1,51 @@
+# @package _global_
+# Track A — TSM_s + motion-aware head (from scratch).
+#
+# Key idea: instead of attention-pooling T features into one vector, expose
+#   global = mean(all frames)    — what action / what scene
+#   first  = frame 0 features   — initial state
+#   last   = frame T-1 features — final state
+#   delta  = last − first       — net motion direction
+# → cat([global, first, last, delta]) → Dropout → Linear(4D, 512) → GELU → Linear(512, 33)
+#
+# This directly encodes temporal direction, critical for SSv2 class pairs
+# (e.g. pulling left vs. right, pushing toward vs. away).
+defaults:
+  - override /model: TSM_s
+
+model:
+  n_resnet_layers: 34          # R34 gives more capacity for the richer 4*D head input
+  fold_div: 8
+  dropout: 0.4
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.15
+  head_hidden: false           # unused when temporal_pool=motion
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 64
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.3
+  use_cutmix: true
+  cutmix_alpha: 0.4
