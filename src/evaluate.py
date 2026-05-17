@@ -89,6 +89,7 @@ def main(cfg: DictConfig) -> None:
         pin_memory=(device.type == "cuda"),
     )
 
+    use_tta = bool(cfg.training.get("use_tta", False))
     correct_top1 = 0
     correct_top5 = 0
     total = 0
@@ -96,8 +97,15 @@ def main(cfg: DictConfig) -> None:
     with torch.no_grad():
         for video_batch, labels in val_loader:
             video_batch = video_batch.to(device)
-            labels = labels.to(device)
-            logits = model(video_batch)  # (B, num_classes)
+            labels      = labels.to(device)
+
+            if use_tta:
+                # Average logits over: original + horizontal flip
+                logits_orig = model(video_batch)
+                logits_flip = model(torch.flip(video_batch, dims=[-1]))
+                logits = (logits_orig + logits_flip) * 0.5
+            else:
+                logits = model(video_batch)  # (B, num_classes)
 
             # Top-1: argmax class matches label
             predictions_top1 = logits.argmax(dim=1)

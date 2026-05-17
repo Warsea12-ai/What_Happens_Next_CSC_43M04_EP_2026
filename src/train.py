@@ -219,6 +219,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pretrained=pretrained,
             dropout=float(cfg.model.get("dropout", 0.5)),
             head_dim=int(cfg.model.get("head_dim", 512)),
+            pretrained_backbone_path=cfg.model.get("pretrained_backbone_path", None),
         )
 
     if name == "cnn_lstm":
@@ -448,7 +449,10 @@ def main(cfg: DictConfig) -> None:
         seed=int(cfg.dataset.seed),
     )
 
-    use_imagenet_norm = bool(cfg.model.pretrained)
+    # Always use ImageNet normalisation — even from-scratch models benefit from
+    # zero-mean unit-variance inputs, and it avoids the clamp(0,1) corruption
+    # in video_augment when clips are in the [-1,1] range produced by 0.5/0.5 norm.
+    use_imagenet_norm = True
     use_rrc = bool(cfg.training.get("use_random_resized_crop", False))
     train_transform = build_transforms(
         is_training=True, use_imagenet_norm=use_imagenet_norm,

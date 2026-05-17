@@ -1,0 +1,37 @@
+# @package _global_
+# Track B — MotionVideoMAE with VideoMAE-Large fine-tuned on SSv2.
+#
+# VideoMAE-Large (307M, 24 blocks, 1024-dim) pretrained on SSv2 (same domain).
+# vs Base (86M, 12 blocks, 768-dim): ~4× more parameters → richer features.
+#
+# Fine-tune last 4 of 24 blocks (num_frozen_blocks=20) + motion-aware head.
+# Backbone LR is very low (5e-6) to protect SSv2 features.
+defaults:
+  - override /model: motion_videomae
+
+model:
+  backbone: MCG-NJU/videomae-large-finetuned-ssv2
+  num_frozen_blocks: 20   # fine-tune last 4 of 24 blocks
+  dropout: 0.3
+
+training:
+  epochs: 40
+  lr: 5.0e-4
+  backbone_lr_scale: 0.01  # backbone gets 5e-6 — very gentle on SSv2 features
+  batch_size: 4             # Large model needs more memory; increase if possible
+  weight_decay: 5e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

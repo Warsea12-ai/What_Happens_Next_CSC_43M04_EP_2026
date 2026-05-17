@@ -1,0 +1,40 @@
+# @package _global_
+# Track A — CNNTemporal fine-tuned from SSL-pretrained backbone.
+#
+# Pre-train first:
+#   python pretrain_ssl_trackA.py --arch resnet18 --epochs 30 --out ssl_backbone_resnet18.pt
+#
+# Then fine-tune:
+#   python train.py experiment=track_A_ssl
+defaults:
+  - override /model: cnn_temporal
+
+model:
+  backbone: resnet18
+  dropout: 0.4
+  head_dim: 256
+  pretrained_backbone_path: ssl_backbone_resnet18.pt
+
+training:
+  epochs: 60            # fewer epochs — backbone already converged on temporal features
+  lr: 2.0e-4            # lower than random-init since backbone is already meaningful
+  batch_size: 64
+  weight_decay: 1e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.2

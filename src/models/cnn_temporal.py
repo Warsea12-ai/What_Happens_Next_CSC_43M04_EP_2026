@@ -30,6 +30,7 @@ class CNNTemporal(nn.Module):
         pretrained: bool = False,
         dropout: float = 0.5,
         head_dim: int = 512,
+        pretrained_backbone_path: str | None = None,
     ) -> None:
         super().__init__()
 
@@ -45,6 +46,11 @@ class CNNTemporal(nn.Module):
         fn, feature_dim, weights = backbone_fn[backbone]
         net = fn(weights=weights if pretrained else None)
         net.fc = nn.Identity()  # type: ignore
+        if pretrained_backbone_path is not None:
+            ckpt = torch.load(pretrained_backbone_path, map_location="cpu")
+            net.load_state_dict(ckpt["backbone_state_dict"])
+            print(f"Loaded SSL backbone from {pretrained_backbone_path} "
+                  f"(val_acc={ckpt.get('val_acc', '?'):.4f})")
         self.backbone = net
         self.feature_dim = feature_dim
 

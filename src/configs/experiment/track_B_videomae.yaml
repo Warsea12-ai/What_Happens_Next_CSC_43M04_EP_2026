@@ -8,19 +8,19 @@ defaults:
   - override /model: videomae
 
 model:
-  num_frozen_blocks: 8   # fine-tune last 4 of 12 blocks (blocks 8-11)
-  dropout: 0.3
-  frames_repeat: 4       # 4 × 4 = 16 frames for VideoMAE
+  num_frozen_blocks: 6   # fine-tune last 6 of 12 blocks — more capacity, SSv2 already in-domain
+  dropout: 0.2
+  frames_repeat: 4
 
 training:
-  epochs: 30
-  lr: 1.0e-4             # head LR
-  backbone_lr_scale: 0.1 # fine-tuned blocks get 1e-5
-  batch_size: 8          # 16 frames × 224² needs ~14GB; reduce to 4 if OOM
-  weight_decay: 1e-4
+  epochs: 50
+  lr: 5.0e-5             # lower head LR — SSv2 features already close to target
+  backbone_lr_scale: 0.1 # fine-tuned blocks get 5e-6
+  batch_size: 8
+  weight_decay: 5e-4     # stronger reg — head can overfit fixed backbone features
   label_smoothing: 0.1
-  warmup_epochs: 3       # short warmup — backbone already well pretrained
-  min_lr: 1.0e-6
+  warmup_epochs: 5
+  min_lr: 1.0e-7
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
