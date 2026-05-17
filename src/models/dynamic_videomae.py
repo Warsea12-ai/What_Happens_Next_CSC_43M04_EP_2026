@@ -83,7 +83,7 @@ class DynamicVideoMAE(nn.Module):
     def __init__(
         self,
         num_classes: int = 33,
-        backbone: str = "MCG-NJU/videomae-large-finetuned-ssv2",
+        backbone: str = "MCG-NJU/videomae-large-finetuned-kinetics",
         num_frozen_blocks: int = 12,
         dropout: float = 0.3,
     ) -> None:

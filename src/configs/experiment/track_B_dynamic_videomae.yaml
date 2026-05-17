@@ -1,10 +1,10 @@
 # @package _global_
-# Track B — DynamicVideoMAE: VideoMAE-Large-SSv2 + Temporal Pyramid head.
+# Track B — DynamicVideoMAE: VideoMAE-Large-Kinetics + Temporal Pyramid head.
 #
 # Architecture advances over MotionVideoMAE/FrozenVideoMAELarge:
 #
 #   1. VideoMAE-Large (307M, 24 blocks, 1024-dim) — 4× more params than Base
-#   2. SSv2 pretraining — same distribution as our 33 challenge classes
+#   2. Kinetics pretraining (Large checkpoint available locally)
 #   3. Temporal Pyramid head (8 features × 1024 = 8192):
 #        f0, f1, f2, f3 = features at all 4 original frame positions
 #        global          = mean over all 8 temporal groups

@@ -10,7 +10,7 @@ defaults:
   - override /model: motion_videomae
 
 model:
-  backbone: MCG-NJU/videomae-large-finetuned-ssv2
+  backbone: MCG-NJU/videomae-large-finetuned-kinetics
   num_frozen_blocks: 20   # fine-tune last 4 of 24 blocks
   dropout: 0.3
 
