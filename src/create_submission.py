@@ -10,8 +10,8 @@ come from the composed config (see ``configs/data/default.yaml`` and
 
 Example (from ``src/``)::
 
-    python create_submission.py
-    python create_submission.py training.checkpoint_path=/path/to/best_model.pt
+    uv run python create_submission.py
+    uv run python create_submission.py training.checkpoint_path=/path/to/best_model.pt
 """
 
 from __future__ import annotations

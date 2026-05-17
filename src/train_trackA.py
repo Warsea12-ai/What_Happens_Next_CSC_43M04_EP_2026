@@ -8,11 +8,11 @@ Key additions over train_augment_3.py:
 
 Run from the ``src/`` directory::
 
-    python train_trackA.py experiment=track_A_best
+    uv run python train_trackA.py experiment=track_A_best
 
 Or from repo root::
 
-    python src/train_trackA.py experiment=track_A_best
+    uv run python src/train_trackA.py experiment=track_A_best
 """
 
 from __future__ import annotations

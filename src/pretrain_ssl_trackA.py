@@ -13,11 +13,11 @@ After pre-training, load the backbone into CNNTemporal via pretrained_backbone_p
 and fine-tune for classification.
 
 Usage (from src/):
-    python pretrain_ssl_trackA.py
+    uv run python pretrain_ssl_trackA.py
     # saves: ssl_backbone_resnet18.pt
 
 Fine-tune with saved backbone:
-    python train.py experiment=track_A_ssl
+    uv run python train.py experiment=track_A_ssl
 """
 
 from __future__ import annotations
@@ -184,9 +184,9 @@ def main() -> None:
 
     print(f"Done. Best val acc: {best_val_acc:.4f}")
     if args.use_tsm:
-        print(f"Load with: TSM_s(pretrained_backbone_path='{args.out}', use_frame_diff=False)")
+        print(f"Load with: uv run python train.py experiment=track_A_tsm_ssl")
     else:
-        print(f"Load with: CNNTemporal(pretrained_backbone_path='{args.out}')")
+        print(f"Load with: uv run python train.py experiment=track_A_ssl")
 
 
 if __name__ == "__main__":

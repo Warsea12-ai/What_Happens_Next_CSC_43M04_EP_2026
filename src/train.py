@@ -3,8 +3,8 @@ Train a video classifier on folders of frames.
 
 Run from the ``src/`` directory (so ``configs/`` resolves)::
 
-    python train.py
-    python train.py experiment=cnn_lstm
+    uv run python train.py
+    uv run python train.py experiment=cnn_lstm
 
 Pick an **experiment** under ``configs/experiment/`` (each one selects a model and can
 add more overrides). You can still override any key, e.g. ``model.pretrained=false``.

@@ -2,10 +2,10 @@
 # Track A — CNNTemporal fine-tuned from SSL-pretrained backbone.
 #
 # Pre-train first:
-#   python pretrain_ssl_trackA.py --arch resnet18 --epochs 30 --out ssl_backbone_resnet18.pt
+#   uv run pythonpretrain_ssl_trackA.py --arch resnet18 --epochs 30 --out ssl_backbone_resnet18.pt
 #
 # Then fine-tune:
-#   python train.py experiment=track_A_ssl
+#   uv run pythontrain.py experiment=track_A_ssl
 defaults:
   - override /model: cnn_temporal
 

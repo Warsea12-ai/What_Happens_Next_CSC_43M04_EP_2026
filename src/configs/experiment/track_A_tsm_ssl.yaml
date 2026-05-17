@@ -2,11 +2,11 @@
 # Track A — TSM_s fine-tuned from SSL-pretrained backbone.
 #
 # Pre-train first (30 epochs, ~45 min on one GPU):
-#   cd src && python pretrain_ssl_trackA.py --arch resnet18 --use_tsm \
+#   cd src && uv run pythonpretrain_ssl_trackA.py --arch resnet18 --use_tsm \
 #       --epochs 30 --out ssl_tsm_backbone.pt
 #
 # Then fine-tune:
-#   python train.py experiment=track_A_tsm_ssl
+#   uv run pythontrain.py experiment=track_A_tsm_ssl
 #
 # Why this helps: the backbone already knows about temporal direction before
 # being asked to distinguish 33 action classes.

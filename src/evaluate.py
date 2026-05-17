@@ -5,7 +5,7 @@ Uses ``dataset.val_dir`` (entire folder; no ``split_train_val``).
 
 Example (from ``src/``)::
 
-    python evaluate.py training.checkpoint_path=best_model.pt
+    uv run python evaluate.py training.checkpoint_path=best_model.pt
 """
 
 from __future__ import annotations

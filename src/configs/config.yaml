@@ -1,5 +1,5 @@
 # Main Hydra config: composes model, data, train, and experiment bundle.
-# Run from `src/`:  python train.py experiment=cnn_lstm
+# Run from `src/`:  uv run python train.py experiment=cnn_lstm
 defaults:
   - model: cnn_baseline
   - data: default

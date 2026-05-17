@@ -9,7 +9,7 @@ Key differences from train_trackA.py:
 
 Run from src/::
 
-    python train_trackB.py experiment=track_B_swin
+    uv run python train_trackB.py experiment=track_B_swin
 """
 
 from __future__ import annotations

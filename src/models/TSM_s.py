@@ -298,7 +298,7 @@ class TSM_s(nn.Module):
                 raise FileNotFoundError(
                     f"SSL backbone not found: {pretrained_backbone_path}\n"
                     "Run pretraining first:\n"
-                    "  python pretrain_ssl_trackA.py --arch resnet18 --use_tsm "
+                    "  uv run python pretrain_ssl_trackA.py --arch resnet18 --use_tsm "
                     "--epochs 30 --out ssl_tsm_backbone.pt"
                 )
             ckpt = _torch.load(pretrained_backbone_path, map_location="cpu",

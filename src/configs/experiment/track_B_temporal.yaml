@@ -7,7 +7,7 @@
 # Expected: 0.38–0.45.
 #
 # Run with train.py (stable, proven script):
-#   python train.py experiment=track_B_temporal
+#   uv run python train.py experiment=track_B_temporal
 defaults:
   - override /model: cnn_temporal
 
