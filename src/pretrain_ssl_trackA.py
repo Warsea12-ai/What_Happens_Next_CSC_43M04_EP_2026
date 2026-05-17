@@ -1,19 +1,24 @@
 """
 Self-supervised temporal pre-training for Track A (no external pretrained weights).
 
-Task: given a 4-frame clip, predict whether the frames are in forward (0) or
-      reversed (1) temporal order.
+Two complementary self-supervised tasks:
 
-Why this helps: the backbone explicitly learns to detect temporal direction before
-being asked to distinguish 33 action classes. With 50k videos × 2 variants
-(forward + reversed) = 100k training pairs, the backbone learns rich motion
-features without any class labels.
+  Task 1 — Temporal order (original, binary):
+    Given a 4-frame clip, predict forward (0) or reversed (1) order.
+    Forces the backbone to detect motion direction.
 
-After pre-training, load the backbone into CNNTemporal via pretrained_backbone_path
-and fine-tune for classification.
+  Task 2 — Temporal position (new, 4-class per frame, --multi_task):
+    Shuffle the 4 frames into a random permutation; predict each frame's
+    original temporal position (0 / 1 / 2 / 3).
+    Forces the backbone to encode absolute temporal location, not just
+    relative direction — richer signal for distinguishing action stages.
+
+Combined loss (multi_task): L = order_CE + 0.5 × position_CE
+100k order pairs + 200k (clip × permutation) position pairs → backbone
+learns both "which direction" and "where in time".
 
 Usage (from src/):
-    uv run python pretrain_ssl_trackA.py
+    uv run python pretrain_ssl_trackA.py --multi_task
     # saves: ssl_backbone_resnet18.pt
 
 Fine-tune with saved backbone:
@@ -40,7 +45,12 @@ _IMAGENET_STD  = [0.229, 0.224, 0.225]
 
 
 class TemporalOrderDataset(Dataset):
-    """Wraps VideoFrameDataset: returns (clip, 0) for forward, (reversed_clip, 1) for reversed."""
+    """Wraps VideoFrameDataset: returns (clip, order_label, shuffled_clip, position_labels).
+
+    order_label      : 0 = forward, 1 = reversed
+    shuffled_clip    : frames in a random permutation (for multi-task position task)
+    position_labels  : (T,) original position of each frame in shuffled_clip
+    """
 
     def __init__(self, base_dataset: VideoFrameDataset) -> None:
         self.base = base_dataset
@@ -52,8 +62,18 @@ class TemporalOrderDataset(Dataset):
         is_reversed = idx >= len(self.base)
         clip, _ = self.base[idx % len(self.base)]  # (T, C, H, W)
         if is_reversed:
-            clip = clip.flip(0)  # reverse temporal order
-        return clip, torch.tensor(int(is_reversed), dtype=torch.long)
+            order_clip = clip.flip(0)
+        else:
+            order_clip = clip
+        order_label = torch.tensor(int(is_reversed), dtype=torch.long)
+
+        # Random permutation of original clip for position task
+        T = clip.shape[0]
+        perm = torch.randperm(T)
+        shuffled = clip[perm]           # shuffled[i] came from position perm[i]
+        pos_labels = perm.long()        # pos_labels[i] = original position of frame i
+
+        return order_clip, order_label, shuffled, pos_labels
 
 
 def build_backbone(arch: str = "resnet18", use_tsm: bool = False, n_segment: int = 4, fold_div: int = 8) -> tuple[nn.Module, int]:
@@ -86,6 +106,8 @@ def main() -> None:
     parser.add_argument("--use_tsm",    action="store_true",
                         help="Wrap backbone with TSM (saves TSM-compatible weights)")
     parser.add_argument("--fold_div",   type=int,   default=8)
+    parser.add_argument("--multi_task", action="store_true",
+                        help="Add temporal position prediction task (richer SSL signal)")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -118,29 +140,36 @@ def main() -> None:
                                         n_segment=4, fold_div=args.fold_div)
     if args.use_tsm:
         print(f"Using TSM-wrapped backbone (fold_div={args.fold_div})")
-    # Small head: pool 4 frame features → direction signals → binary
-    model = nn.Sequential(
-        backbone,                                # receives (B*T, C, H, W) → (B*T, D)
-    )
 
-    # Full model wrapping backbone + temporal direction head
     class SSLModel(nn.Module):
-        def __init__(self, bb: nn.Module, dim: int) -> None:
+        def __init__(self, bb: nn.Module, dim: int, multi_task: bool = False) -> None:
             super().__init__()
             self.bb = bb
+            self.multi_task = multi_task
             self.ln_c = nn.LayerNorm(dim)
             self.ln_d = nn.LayerNorm(dim)
-            self.head = nn.Linear(3 * dim, 2)  # binary: forward vs reversed
+            # Task 1: temporal order (forward vs reversed)
+            self.order_head = nn.Linear(3 * dim, 2)
+            if multi_task:
+                # Task 2: temporal position (which of T positions is this frame?)
+                self.pos_head = nn.Linear(dim, 4)
 
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            B, T, C, H, W = x.shape
-            f = self.bb(x.reshape(B * T, C, H, W)).view(B, T, -1)
-            avg    = f.mean(1)
-            diff   = (f[:, 1:] - f[:, :-1]).mean(1)
-            net    = f[:, -1] - f[:, 0]
-            return self.head(torch.cat([self.ln_c(avg), self.ln_d(diff), self.ln_d(net)], 1))
+        def forward(self, order_clip: torch.Tensor, shuffled: torch.Tensor | None = None):
+            B, T, C, H, W = order_clip.shape
+            f = self.bb(order_clip.reshape(B * T, C, H, W)).view(B, T, -1)
+            avg  = f.mean(1)
+            diff = (f[:, 1:] - f[:, :-1]).mean(1)
+            net  = f[:, -1] - f[:, 0]
+            order_logits = self.order_head(torch.cat([self.ln_c(avg), self.ln_d(diff), self.ln_d(net)], 1))
 
-    ssl = SSLModel(backbone, feat_dim).to(device)
+            if self.multi_task and shuffled is not None:
+                g = self.bb(shuffled.reshape(B * T, C, H, W)).view(B * T, -1)
+                pos_logits = self.pos_head(g).view(B, T, 4)   # (B, T, 4)
+                return order_logits, pos_logits
+
+            return order_logits
+
+    ssl = SSLModel(backbone, feat_dim, multi_task=args.multi_task).to(device)
     optimizer = torch.optim.AdamW(ssl.parameters(), lr=args.lr, weight_decay=1e-4)
     loss_fn   = nn.CrossEntropyLoss()
 
@@ -150,31 +179,54 @@ def main() -> None:
         CosineAnnealingLR(optimizer, T_max=args.epochs - warmup, eta_min=1e-5),
     ], milestones=[warmup])
 
+    if args.multi_task:
+        print("Multi-task SSL: temporal order + temporal position prediction")
+
     best_val_acc = 0.0
     for epoch in range(args.epochs):
         ssl.train()
-        correct, total = 0, 0
-        for clips, labels in train_loader:
-            clips, labels = clips.to(device), labels.to(device)
+        order_correct, order_total = 0, 0
+        for order_clips, order_labels, shuffled_clips, pos_labels in train_loader:
+            order_clips   = order_clips.to(device)
+            order_labels  = order_labels.to(device)
+            shuffled_clips = shuffled_clips.to(device)
+            pos_labels    = pos_labels.to(device)   # (B, T)
+
             optimizer.zero_grad()
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
-                loss = loss_fn(ssl(clips), labels)
+                if args.multi_task:
+                    order_logits, pos_logits = ssl(order_clips, shuffled_clips)
+                    B, T = pos_labels.shape
+                    order_loss = loss_fn(order_logits, order_labels)
+                    pos_loss   = loss_fn(pos_logits.reshape(B * T, 4), pos_labels.reshape(B * T))
+                    loss = order_loss + 0.5 * pos_loss
+                else:
+                    order_logits = ssl(order_clips)
+                    loss = loss_fn(order_logits, order_labels)
+
             loss.backward()
             nn.utils.clip_grad_norm_(ssl.parameters(), 1.0)
             optimizer.step()
-            correct += (ssl(clips).argmax(1) == labels).sum().item()
-            total += labels.size(0)
+
+            with torch.no_grad():
+                order_correct += (order_logits.argmax(1) == order_labels).sum().item()
+                order_total   += order_labels.size(0)
         sched.step()
 
         ssl.eval()
         val_correct, val_total = 0, 0
         with torch.no_grad():
-            for clips, labels in val_loader:
-                clips, labels = clips.to(device), labels.to(device)
-                val_correct += (ssl(clips).argmax(1) == labels).sum().item()
-                val_total += labels.size(0)
+            for order_clips, order_labels, _, _ in val_loader:
+                order_clips  = order_clips.to(device)
+                order_labels = order_labels.to(device)
+                logits = ssl(order_clips)
+                if isinstance(logits, tuple):
+                    logits = logits[0]
+                val_correct += (logits.argmax(1) == order_labels).sum().item()
+                val_total   += order_labels.size(0)
         val_acc = val_correct / max(val_total, 1)
-        print(f"Epoch {epoch+1}/{args.epochs} | val_acc={val_acc:.4f}")
+        train_acc = order_correct / max(order_total, 1)
+        print(f"Epoch {epoch+1}/{args.epochs} | train_order={train_acc:.3f} val_order={val_acc:.4f}")
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
@@ -185,6 +237,7 @@ def main() -> None:
     print(f"Done. Best val acc: {best_val_acc:.4f}")
     if args.use_tsm:
         print(f"Load with: uv run python train.py experiment=track_A_tsm_ssl")
+        print(f"       or: uv run python train.py experiment=track_A_tsm_ssl_motion  (motion head)")
     else:
         print(f"Load with: uv run python train.py experiment=track_A_ssl")
 

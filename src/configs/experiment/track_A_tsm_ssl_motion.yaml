@@ -1,0 +1,63 @@
+# @package _global_
+# Track A — TSM_s + SSL-pretrained backbone + motion-aware head.
+#
+# Best of both worlds:
+#   1. SSL backbone (from pretrain_ssl_trackA.py --use_tsm --multi_task) already
+#      knows about temporal direction and frame positions before seeing any labels.
+#   2. Motion-aware head [global, first, last, delta] → (4×512=2048) → 512 → 33
+#      directly encodes the start-state, end-state, and net motion direction.
+#
+# vs track_A_tsm_ssl (attention pool):
+#   Motion head gives explicit first/last features instead of learned attention
+#   weighting — harder to overfit with only 50k training clips.
+#
+# vs track_A_tsm_motion (random init):
+#   SSL backbone already knows about temporal direction → faster convergence,
+#   better features in the backbone before classification training starts.
+#
+# Pretrain first (30 epochs, ~1 hour):
+#   cd src && python pretrain_ssl_trackA.py \
+#       --arch resnet18 --use_tsm --multi_task --epochs 30 --out ssl_tsm_backbone.pt
+#
+# Then fine-tune:
+#   python train.py experiment=track_A_tsm_ssl_motion
+defaults:
+  - override /model: TSM_s
+
+model:
+  n_resnet_layers: 18
+  fold_div: 8
+  dropout: 0.35
+  temporal_pool: motion        # [global, first, last, delta] → 4×512 → 512 → 33
+  use_frame_diff: false        # must match SSL pretraining (3-channel conv1)
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.10
+  head_hidden: false
+  pretrained_backbone_path: ssl_tsm_backbone.pt
+
+training:
+  epochs: 80
+  lr: 3.0e-4
+  batch_size: 64
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.3
+  use_cutmix: true
+  cutmix_alpha: 0.4
