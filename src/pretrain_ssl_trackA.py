@@ -81,7 +81,7 @@ def main() -> None:
     parser.add_argument("--batch_size", type=int,   default=128)
     parser.add_argument("--num_workers",type=int,   default=4)
     parser.add_argument("--seed",       type=int,   default=42)
-    parser.add_argument("--train_dir",  default="../data/train")
+    parser.add_argument("--train_dir",  default="processed_data/val2/train")
     parser.add_argument("--out",        default="ssl_backbone_resnet18.pt")
     parser.add_argument("--use_tsm",    action="store_true",
                         help="Wrap backbone with TSM (saves TSM-compatible weights)")
