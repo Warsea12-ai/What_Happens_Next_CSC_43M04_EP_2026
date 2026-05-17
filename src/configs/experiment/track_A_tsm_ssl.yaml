@@ -1,0 +1,54 @@
+# @package _global_
+# Track A — TSM_s fine-tuned from SSL-pretrained backbone.
+#
+# Pre-train first (30 epochs, ~45 min on one GPU):
+#   cd src && python pretrain_ssl_trackA.py --arch resnet18 --use_tsm \
+#       --epochs 30 --out ssl_tsm_backbone.pt
+#
+# Then fine-tune:
+#   python train.py experiment=track_A_tsm_ssl
+#
+# Why this helps: the backbone already knows about temporal direction before
+# being asked to distinguish 33 action classes.
+# use_frame_diff=false so backbone conv1 stays 3-channel (matching SSL save).
+defaults:
+  - override /model: TSM_s
+
+model:
+  pretrained: false
+  n_resnet_layers: 18
+  fold_div: 8
+  dropout: 0.35
+  temporal_pool: attention
+  use_frame_diff: false        # must match SSL pretraining (3-channel conv1)
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.10
+  head_hidden: false
+  pretrained_backbone_path: ssl_tsm_backbone.pt
+
+training:
+  epochs: 80               # fewer — backbone already initialised well
+  lr: 3.0e-4               # lower — pretrained backbone needs gentler start
+  batch_size: 64
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.3
+  use_cutmix: true
+  cutmix_alpha: 0.4

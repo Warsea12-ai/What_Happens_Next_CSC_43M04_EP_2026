@@ -12,7 +12,11 @@ Version adaptée pour from-scratch sur ~50k clips de 4 frames :
 Format d'entrée : (B, T, C, H, W)
 Format de sortie : (B, num_classes)
 """
+from __future__ import annotations
+
 import math
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
@@ -245,6 +249,7 @@ class TSM_s(nn.Module):
         pe_mode: str = "learned",
         stochastic_depth: float = 0.1,
         head_hidden: bool = False,
+        pretrained_backbone_path: Optional[str] = None,
     ):
         super().__init__()
         self.n_segment = n_segment
@@ -285,6 +290,14 @@ class TSM_s(nn.Module):
         in_features = backbone.fc.in_features
         backbone.fc = nn.Identity()  # type: ignore
         self.backbone = backbone
+
+        # ---- Load SSL-pretrained backbone (optional) -----------------------
+        if pretrained_backbone_path is not None:
+            import torch as _torch
+            ckpt = _torch.load(pretrained_backbone_path, map_location="cpu")
+            self.backbone.load_state_dict(ckpt["backbone_state_dict"])
+            print(f"Loaded TSM SSL backbone from {pretrained_backbone_path} "
+                  f"(val_acc={ckpt.get('val_acc', '?'):.4f})")
 
         # ---- Non-Local (optionnel) ----------------------------------------
         if use_nonlocal:

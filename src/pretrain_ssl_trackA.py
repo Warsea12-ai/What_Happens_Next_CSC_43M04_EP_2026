@@ -56,7 +56,7 @@ class TemporalOrderDataset(Dataset):
         return clip, torch.tensor(int(is_reversed), dtype=torch.long)
 
 
-def build_backbone(arch: str = "resnet18") -> tuple[nn.Module, int]:
+def build_backbone(arch: str = "resnet18", use_tsm: bool = False, n_segment: int = 4, fold_div: int = 8) -> tuple[nn.Module, int]:
     if arch == "resnet18":
         net = models.resnet18(weights=None)
         dim = 512
@@ -66,6 +66,10 @@ def build_backbone(arch: str = "resnet18") -> tuple[nn.Module, int]:
     else:
         raise ValueError(arch)
     net.fc = nn.Identity()
+    if use_tsm:
+        # Wrap with residual TSM (same structure as TSM_s, stochastic_depth=0 for SSL stability)
+        from models.TSM_s import make_temporal_shift as _make_tsm
+        _make_tsm(net, n_segment=n_segment, fold_div=fold_div, max_drop_prob=0.0)
     return net, dim
 
 
@@ -79,6 +83,9 @@ def main() -> None:
     parser.add_argument("--seed",       type=int,   default=42)
     parser.add_argument("--train_dir",  default="../data/train")
     parser.add_argument("--out",        default="ssl_backbone_resnet18.pt")
+    parser.add_argument("--use_tsm",    action="store_true",
+                        help="Wrap backbone with TSM (saves TSM-compatible weights)")
+    parser.add_argument("--fold_div",   type=int,   default=8)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -107,7 +114,10 @@ def main() -> None:
     val_loader   = DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False,
                               num_workers=args.num_workers, pin_memory=True)
 
-    backbone, feat_dim = build_backbone(args.arch)
+    backbone, feat_dim = build_backbone(args.arch, use_tsm=args.use_tsm,
+                                        n_segment=4, fold_div=args.fold_div)
+    if args.use_tsm:
+        print(f"Using TSM-wrapped backbone (fold_div={args.fold_div})")
     # Small head: pool 4 frame features → direction signals → binary
     model = nn.Sequential(
         backbone,                                # receives (B*T, C, H, W) → (B*T, D)
@@ -173,7 +183,10 @@ def main() -> None:
             print(f"  Saved backbone → {args.out} (val_acc={val_acc:.4f})")
 
     print(f"Done. Best val acc: {best_val_acc:.4f}")
-    print(f"Load with: CNNTemporal(pretrained_backbone_path='{args.out}')")
+    if args.use_tsm:
+        print(f"Load with: TSM_s(pretrained_backbone_path='{args.out}', use_frame_diff=False)")
+    else:
+        print(f"Load with: CNNTemporal(pretrained_backbone_path='{args.out}')")
 
 
 if __name__ == "__main__":

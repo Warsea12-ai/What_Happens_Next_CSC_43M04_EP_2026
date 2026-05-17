@@ -33,6 +33,7 @@ from models.vit_temporal import ViTTemporal
 from models.videomae import VideoMAEClassifier
 from models.motion_videomae import MotionVideoMAE
 from models.frozen_videomae import FrozenVideoMAELarge
+from models.qwen_vl_video import QwenVLVideo
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -192,6 +193,12 @@ def build_model(cfg: DictConfig) -> nn.Module:
             backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
             dropout=float(cfg.model.get("dropout", 0.5)),
         )
+    if name == "qwen_vl_video":
+        return QwenVLVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+        )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
 
@@ -240,12 +247,15 @@ def train_one_epoch(
     reverse_prob: float = 0.5,
     use_temporal_map: bool = False,
     clip_grad_norm: float = 1.0,
+    grad_accum_steps: int = 1,
 ) -> Tuple[float, float]:
     model.train()
     running_loss, correct, total = 0.0, 0, 0
     aug_kwargs = aug_kwargs or {}
+    n_batches = len(data_loader)
 
-    for video_batch, labels in data_loader:
+    optimizer.zero_grad()
+    for step, (video_batch, labels) in enumerate(data_loader):
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
 
@@ -260,17 +270,20 @@ def train_one_epoch(
         if use_augment:
             video_batch = video_augment(video_batch, **aug_kwargs)
 
-        optimizer.zero_grad()
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
             logits = model(video_batch)
-            loss = loss_fn(logits, labels)
+            loss = loss_fn(logits, labels) / grad_accum_steps
 
         loss.backward()
-        if clip_grad_norm > 0:
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
-        optimizer.step()
 
-        running_loss += float(loss.item()) * labels.size(0)
+        is_last_batch = (step + 1 == n_batches)
+        if (step + 1) % grad_accum_steps == 0 or is_last_batch:
+            if clip_grad_norm > 0:
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
+            optimizer.step()
+            optimizer.zero_grad()
+
+        running_loss += float(loss.item()) * grad_accum_steps * labels.size(0)
         correct += int((logits.argmax(dim=1) == labels).sum().item())
         total += labels.size(0)
 
@@ -395,6 +408,10 @@ def main(cfg: DictConfig) -> None:
     use_temporal_map = bool(cfg.training.get("use_temporal_map", True))
 
     clip_grad_norm = float(cfg.training.get("clip_grad_norm", 1.0))
+    grad_accum_steps = int(cfg.training.get("grad_accum_steps", 1))
+    if grad_accum_steps > 1:
+        print(f"  Gradient accumulation: {grad_accum_steps} steps "
+              f"(effective batch size = {int(cfg.training.batch_size) * grad_accum_steps})")
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
@@ -408,6 +425,7 @@ def main(cfg: DictConfig) -> None:
             reverse_lookup=reverse_lookup, reverse_prob=reverse_prob,
             use_temporal_map=use_temporal_map,
             clip_grad_norm=clip_grad_norm,
+            grad_accum_steps=grad_accum_steps,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
         scheduler.step()

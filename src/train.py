@@ -170,12 +170,37 @@ def mixup_batch(
     B = clips.shape[0]
     idx = torch.randperm(B, device=clips.device)
     mixed_clips = lam * clips + (1 - lam) * clips[idx]
-    # Soft one-hot labels
     y = torch.zeros(B, num_classes, device=clips.device)
     y.scatter_(1, labels.unsqueeze(1), 1.0)
-    y_perm = y[idx]
-    mixed_labels = lam * y + (1 - lam) * y_perm
+    mixed_labels = lam * y + (1 - lam) * y[idx]
     return mixed_clips, mixed_labels
+
+
+@torch.no_grad()
+def cutmix_batch(
+    clips: torch.Tensor, labels: torch.Tensor,
+    alpha: float = 0.4, num_classes: int = 33,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """CutMix: paste a random box from a shuffled sample; returns soft labels."""
+    lam = float(torch.distributions.Beta(alpha, alpha).sample())
+    B, T, C, H, W = clips.shape
+    idx = torch.randperm(B, device=clips.device)
+
+    cut_h = int(H * (1 - lam) ** 0.5)
+    cut_w = int(W * (1 - lam) ** 0.5)
+    cy = int(torch.randint(H, (1,)))
+    cx = int(torch.randint(W, (1,)))
+    y1, y2 = max(0, cy - cut_h // 2), min(H, cy + cut_h // 2)
+    x1, x2 = max(0, cx - cut_w // 2), min(W, cx + cut_w // 2)
+
+    mixed = clips.clone()
+    mixed[:, :, :, y1:y2, x1:x2] = clips[idx, :, :, y1:y2, x1:x2]
+    lam = 1.0 - (y2 - y1) * (x2 - x1) / (H * W)  # actual lambda after clipping
+
+    y = torch.zeros(B, num_classes, device=clips.device)
+    y.scatter_(1, labels.unsqueeze(1), 1.0)
+    mixed_labels = lam * y + (1 - lam) * y[idx]
+    return mixed, mixed_labels
 
 
 def build_model(cfg: DictConfig) -> nn.Module:
@@ -243,7 +268,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
     
     if name == "R2Plus1D":
         return R2Plus1D(
-            num_classes=num_classes
+            num_classes=num_classes,
+            dropout=float(cfg.model.get("dropout", 0.5)),
         )
     
     if name == "TSM":
@@ -263,17 +289,18 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "TSM_s":
         return TSM_s(
             num_classes=num_classes,
-            n_segment=4,
-            fold_div=8,
-            dropout=0.5,
-            n_resnet_layers=18,           # commence ici
-            temporal_pool="attention",
-            use_nonlocal=False,           # à activer plus tard
-            use_frame_diff=True,
-            use_positional_encoding=True,
-            pe_mode="learned",
-            stochastic_depth=0.1,
-            head_hidden=False,
+            n_segment=int(cfg.dataset.num_frames),
+            fold_div=int(cfg.model.get("fold_div", 8)),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 18)),
+            temporal_pool=str(cfg.model.get("temporal_pool", "attention")),
+            use_nonlocal=bool(cfg.model.get("use_nonlocal", False)),
+            use_frame_diff=bool(cfg.model.get("use_frame_diff", True)),
+            use_positional_encoding=bool(cfg.model.get("use_positional_encoding", True)),
+            pe_mode=str(cfg.model.get("pe_mode", "sinusoidal")),
+            stochastic_depth=float(cfg.model.get("stochastic_depth", 0.1)),
+            head_hidden=bool(cfg.model.get("head_hidden", False)),
+            pretrained_backbone_path=cfg.model.get("pretrained_backbone_path", None),
         )
 
     if name == "TSM_RES":
@@ -332,6 +359,8 @@ def train_one_epoch(
     use_imagenet_norm: bool = False,
     use_mixup: bool = False,
     mixup_alpha: float = 0.2,
+    use_cutmix: bool = False,
+    cutmix_alpha: float = 0.4,
     num_classes: int = 33,
 ) -> Tuple[float, float]:
     """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
@@ -362,9 +391,23 @@ def train_one_epoch(
             )
 
         soft_labels = None
-        if use_mixup:
+        if use_mixup and use_cutmix:
+            # Alternate randomly between MixUp and CutMix
+            if torch.rand(1).item() < 0.5:
+                video_batch, soft_labels = mixup_batch(
+                    video_batch, labels, alpha=mixup_alpha, num_classes=num_classes,
+                )
+            else:
+                video_batch, soft_labels = cutmix_batch(
+                    video_batch, labels, alpha=cutmix_alpha, num_classes=num_classes,
+                )
+        elif use_mixup:
             video_batch, soft_labels = mixup_batch(
                 video_batch, labels, alpha=mixup_alpha, num_classes=num_classes,
+            )
+        elif use_cutmix:
+            video_batch, soft_labels = cutmix_batch(
+                video_batch, labels, alpha=cutmix_alpha, num_classes=num_classes,
             )
 
         optimizer.zero_grad()
@@ -540,8 +583,10 @@ def main(cfg: DictConfig) -> None:
     reverse_prob = float(cfg.training.get("equivariant_reverse_prob", 0.5))
     use_temporal_map = bool(cfg.training.get("use_temporal_map", False))
 
-    use_mixup   = bool(cfg.training.get("use_mixup",    False))
-    mixup_alpha = float(cfg.training.get("mixup_alpha", 0.2))
+    use_mixup    = bool(cfg.training.get("use_mixup",    False))
+    mixup_alpha  = float(cfg.training.get("mixup_alpha",  0.2))
+    use_cutmix   = bool(cfg.training.get("use_cutmix",   False))
+    cutmix_alpha = float(cfg.training.get("cutmix_alpha", 0.4))
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
@@ -561,6 +606,8 @@ def main(cfg: DictConfig) -> None:
             use_imagenet_norm=use_imagenet_norm,
             use_mixup=use_mixup,
             mixup_alpha=mixup_alpha,
+            use_cutmix=use_cutmix,
+            cutmix_alpha=cutmix_alpha,
             num_classes=num_classes,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)

@@ -5,14 +5,16 @@
 flip_forbidden_labels : [18, 19]
 # Mêmes règles : symétrique, {N: N} si invariant, omis = pas de reverse
 temporal_reverse_map:
-   6 :  7 
-   7 :  6 
-   8 :  9 
-   9 :  8 
-   0 : 10 
-   10 :  0 
-   22 : 28 
-   28 : 22 
-   30 : 30 
-   32 :  3 
-   3 : 032
+   0 : 10    # Closing ↔ Opening
+   10 :  0
+   1 : 31    # Covering ↔ Uncovering
+   31 :  1
+   6 :  7    # Moving away ↔ Moving closer
+   7 :  6
+   8 :  9    # Moving down ↔ Moving up
+   9 :  8
+   22 : 28   # Putting into ↔ Taking out of
+   28 : 22
+   3 : 32    # Folding ↔ Unfolding
+   32 :  3
+   30 : 30

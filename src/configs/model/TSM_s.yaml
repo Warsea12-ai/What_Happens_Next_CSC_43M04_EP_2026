@@ -1,6 +1,12 @@
 name: TSM_s
-pretrained: False 
+pretrained: false
 num_classes: ${num_classes}
-n_segment: ${dataset.num_frames}
-pe_mode: sinusoidal   
-# your hyperparameters
+n_resnet_layers: 18
+fold_div: 8
+dropout: 0.5
+temporal_pool: attention
+use_frame_diff: true
+use_positional_encoding: true
+pe_mode: sinusoidal
+stochastic_depth: 0.1
+head_hidden: false

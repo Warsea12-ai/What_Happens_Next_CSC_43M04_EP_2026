@@ -1,0 +1,36 @@
+# @package _global_
+# Track B — Qwen2-VL-2B visual encoder (665M, frozen) + motion-aware head.
+#
+# The Qwen2-VL visual encoder is pretrained on massive image+video language data,
+# giving richer semantic features than VideoMAE for scene understanding tasks.
+# Fully frozen backbone: no backprop through 665M params → low VRAM, high batch.
+#
+# Head: [global, first, last, delta] (4×1536=6144) → Linear(6144,512) → Linear(512,33)
+defaults:
+  - override /model: qwen_vl_video
+
+model:
+  dropout: 0.5
+
+training:
+  epochs: 80
+  lr: 5.0e-4             # head only — can be aggressive, no backbone to protect
+  backbone_lr_scale: 0.0 # backbone is frozen; unused but kept for compat
+  batch_size: 32         # bfloat16 encoder; 32 is safe on 25 GB
+  grad_accum_steps: 2    # effective batch = 64
+  weight_decay: 1e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

@@ -17,6 +17,7 @@ training:
   lr: 5.0e-5             # lower head LR — SSv2 features already close to target
   backbone_lr_scale: 0.1 # fine-tuned blocks get 5e-6
   batch_size: 8
+  grad_accum_steps: 4      # effective batch size = 32
   weight_decay: 5e-4     # stronger reg — head can overfit fixed backbone features
   label_smoothing: 0.1
   warmup_epochs: 5

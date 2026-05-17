@@ -19,8 +19,26 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
-from train import build_model
+import train as _train_a
+import train_trackB as _train_b
 from utils import build_transforms, set_seed
+
+_TRACK_B_MODELS = {"videomae", "motion_videomae", "frozen_videomae", "swin3d_finetune", "vit_temporal", "qwen_vl_video"}
+
+
+def build_model(cfg):
+    name = cfg.model.name
+    if name in _TRACK_B_MODELS:
+        return _train_b.build_model(cfg)
+    return _train_a.build_model(cfg)
+
+
+def _three_crop(video: torch.Tensor, crop_size: int = 224) -> list:
+    """Return top-left, center, bottom-right crops from a (B, T, C, H, W) tensor."""
+    H, W = video.shape[-2], video.shape[-1]
+    r_offsets = [0, (H - crop_size) // 2, H - crop_size]
+    c_offsets = [0, (W - crop_size) // 2, W - crop_size]
+    return [video[:, :, :, r:r + crop_size, c:c + crop_size] for r, c in zip(r_offsets, c_offsets)]
 
 
 def load_model_from_checkpoint(checkpoint: Dict[str, Any], device: torch.device) -> torch.nn.Module:
@@ -63,7 +81,12 @@ def main(cfg: DictConfig) -> None:
     # Checkpoints from train_trackA/B.py store use_imagenet_norm explicitly.
     # Older checkpoints fall back to the pretrained flag (original heuristic).
     use_imagenet_norm = bool(raw.get("use_imagenet_norm", raw.get("pretrained", cfg.model.pretrained)))
-    eval_transform = build_transforms(is_training=False, use_imagenet_norm=use_imagenet_norm)
+    use_multi_crop = bool(cfg.training.get("use_multi_crop", False))
+    use_tta = bool(cfg.training.get("use_tta", False))
+
+    # Multi-crop: load at 256×256, crop 3×224×224 at inference; otherwise 224×224.
+    eval_size = 256 if use_multi_crop else 224
+    eval_transform = build_transforms(image_size=eval_size, is_training=False, use_imagenet_norm=use_imagenet_norm)
 
     val_dir = Path(cfg.dataset.val_dir).resolve()
     val_samples = collect_video_samples(val_dir)
@@ -89,7 +112,6 @@ def main(cfg: DictConfig) -> None:
         pin_memory=(device.type == "cuda"),
     )
 
-    use_tta = bool(cfg.training.get("use_tta", False))
     correct_top1 = 0
     correct_top5 = 0
     total = 0
@@ -99,7 +121,10 @@ def main(cfg: DictConfig) -> None:
             video_batch = video_batch.to(device)
             labels      = labels.to(device)
 
-            if use_tta:
+            if use_multi_crop:
+                crops = _three_crop(video_batch, crop_size=224)
+                logits = sum(model(c) for c in crops) / len(crops)
+            elif use_tta:
                 # Average logits over: original + horizontal flip
                 logits_orig = model(video_batch)
                 logits_flip = model(torch.flip(video_batch, dims=[-1]))

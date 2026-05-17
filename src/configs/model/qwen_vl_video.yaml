@@ -1,0 +1,4 @@
+name: qwen_vl_video
+num_classes: 33
+backbone: Qwen/Qwen2-VL-2B-Instruct
+dropout: 0.5

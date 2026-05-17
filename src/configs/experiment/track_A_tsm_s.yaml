@@ -1,23 +1,26 @@
 # @package _global_
-# Track A — Closed World (from scratch, no pretrained weights)
-# Model: TSM with ResNet-34 backbone, residual temporal shift
+# Track A — TSM_s with ResNet-18, stochastic depth, CutMix+MixUp.
 #
-# Augmentation rationale: heavy color jitter + blur hurts from-scratch training
-# because the backbone has no prior and needs stable gradients to learn basic
-# visual features first. Only keep mild color jitter + spatial augmentations.
-# Temporal equivariance (flip + reverse) stays — it's free label-consistent signal.
+# Key differences from track_A_best (TSM ResNet-34):
+#   - ResNet-18 (smaller, less overfitting on 50k videos)
+#   - Stochastic depth 0.15 (extra regularisation)
+#   - CutMix + MixUp alternating (best practice for action recognition)
+#   - Longer training (120 epochs) with stronger weight decay
+#   - Sinusoidal PE (no learned PE params to overfit)
 defaults:
-  - override /model: TSM
+  - override /model: TSM_s
 
 model:
   pretrained: false
-  n_resnet_layers: 34
+  n_resnet_layers: 18
   fold_div: 8
-  residual_shift: true
-  use_frame_diff: true
+  dropout: 0.4
   temporal_pool: attention
+  use_frame_diff: true
   use_positional_encoding: true
   pe_mode: sinusoidal
+  stochastic_depth: 0.15
+  head_hidden: false
 
 training:
   epochs: 120

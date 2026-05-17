@@ -18,7 +18,8 @@ training:
   epochs: 40
   lr: 5.0e-4
   backbone_lr_scale: 0.01  # backbone gets 5e-6 — very gentle on SSv2 features
-  batch_size: 4             # Large model needs more memory; increase if possible
+  batch_size: 4             # Large model needs more memory
+  grad_accum_steps: 8      # effective batch size = 32
   weight_decay: 5e-4
   label_smoothing: 0.1
   warmup_epochs: 5

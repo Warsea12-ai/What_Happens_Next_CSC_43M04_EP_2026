@@ -1,4 +1,4 @@
 name: R2Plus1D
-pretrained: False 
+pretrained: false
 num_classes: ${num_classes}
-# your hyperparameters
+dropout: 0.5

@@ -1,0 +1,37 @@
+# @package _global_
+# Track A — R(2+1)D-18 from scratch.
+#
+# R(2+1)D decomposes 3D convolutions into spatial (2D) + temporal (1D),
+# giving proper spatiotemporal features unlike TSM's shifted 2D convs.
+# With T=4 frames the temporal kernel still spans the full clip.
+defaults:
+  - override /model: R2Plus1D
+
+model:
+  pretrained: false
+
+training:
+  epochs: 120
+  lr: 1.0e-3               # R(2+1)D trains better at higher LR from scratch
+  batch_size: 32            # 3D model uses more memory than 2D
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.3
+  use_cutmix: true
+  cutmix_alpha: 0.4
