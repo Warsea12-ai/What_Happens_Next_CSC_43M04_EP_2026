@@ -43,6 +43,7 @@ from models.cnn_baseline import CNNBaseline
 from models.cnn_lstm import CNNLSTM
 from models.cnn_temporal import CNNTemporal
 from models.cnn_hybrid import CNNHybrid
+from models.mobilenet_tsm import MobileNetTSM
 from models.video_transformer import VideoTransformer
 from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
@@ -284,6 +285,17 @@ def build_model(cfg: DictConfig) -> nn.Module:
             temporal_pool=cfg.model.get("temporal_pool", "attention"),
             use_positional_encoding=cfg.model.get("use_positional_encoding", True),
             pe_mode=cfg.model.get("pe_mode", "sinusoidal"),
+        )
+
+    if name == "mobilenet_tsm":
+        return MobileNetTSM(
+            num_classes=num_classes,
+            n_segment=int(cfg.dataset.num_frames),
+            fold_div=int(cfg.model.get("fold_div", 8)),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            temporal_pool=str(cfg.model.get("temporal_pool", "attention")),
+            use_positional_encoding=bool(cfg.model.get("use_positional_encoding", True)),
+            pe_mode=str(cfg.model.get("pe_mode", "sinusoidal")),
         )
 
     if name == "TSM_s":

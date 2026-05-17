@@ -1,0 +1,34 @@
+# @package _global_
+# Track A — MobileNetV3-Small + TSM from scratch.
+#
+# ~2.5M params (vs ~11M for R18): lighter, different inductive bias:
+# depthwise separable convs + SE channel attention vs ResNet full convolutions.
+# Useful as ensemble component with TSM_s R18/R34.
+defaults:
+  - override /model: mobilenet_tsm
+
+training:
+  epochs: 60
+  lr: 5.0e-4
+  batch_size: 64
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

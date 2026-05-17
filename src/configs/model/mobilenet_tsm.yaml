@@ -1,0 +1,8 @@
+name: mobilenet_tsm
+pretrained: false
+num_classes: ${num_classes}
+fold_div: 8
+dropout: 0.5
+temporal_pool: attention
+use_positional_encoding: true
+pe_mode: sinusoidal
