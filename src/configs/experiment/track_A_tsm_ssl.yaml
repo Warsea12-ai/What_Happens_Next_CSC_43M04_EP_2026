@@ -1,16 +1,16 @@
 # @package _global_
 # Track A — TSM_s fine-tuned from SSL-pretrained backbone.
 #
-# Pre-train first (30 epochs, ~45 min on one GPU):
-#   cd src && uv run pythonpretrain_ssl_trackA.py --arch resnet18 --use_tsm \
-#       --epochs 30 --out ssl_tsm_backbone.pt
+# Pre-train first (~20 epochs, ~30 min):
+#   cd src && uv run python pretrain_ssl_trackA.py --arch resnet18 --use_tsm \
+#       --epochs 20 --out ssl_tsm_backbone.pt
 #
 # Then fine-tune:
-#   uv run pythontrain.py experiment=track_A_tsm_ssl
+#   uv run python train.py experiment=track_A_tsm_ssl
 #
-# Why this helps: the backbone already knows about temporal direction before
-# being asked to distinguish 33 action classes.
-# use_frame_diff=false so backbone conv1 stays 3-channel (matching SSL save).
+# SSL backbone already knows temporal direction → fine-tune needs fewer epochs
+# but same strong regularisation (model still overfits past ~30 epochs).
+# use_frame_diff=false: backbone conv1 stays 3-channel (matches SSL save).
 defaults:
   - override /model: TSM_s
 
@@ -18,21 +18,21 @@ model:
   pretrained: false
   n_resnet_layers: 18
   fold_div: 8
-  dropout: 0.35
+  dropout: 0.5
   temporal_pool: attention
   use_frame_diff: false        # must match SSL pretraining (3-channel conv1)
   use_positional_encoding: true
   pe_mode: sinusoidal
-  stochastic_depth: 0.10
+  stochastic_depth: 0.20
   head_hidden: false
   pretrained_backbone_path: ssl_tsm_backbone.pt
 
 training:
-  epochs: 80               # fewer — backbone already initialised well
-  lr: 3.0e-4               # lower — pretrained backbone needs gentler start
+  epochs: 50
+  lr: 2.0e-4               # lower — pretrained backbone needs gentler start
   batch_size: 64
-  weight_decay: 2.0e-4
-  label_smoothing: 0.1
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
   warmup_epochs: 5
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
@@ -49,6 +49,6 @@ training:
   equivariant_reverse_prob: 0.5
 
   use_mixup: true
-  mixup_alpha: 0.3
+  mixup_alpha: 0.8
   use_cutmix: true
-  cutmix_alpha: 0.4
+  cutmix_alpha: 1.0

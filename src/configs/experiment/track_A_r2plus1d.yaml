@@ -9,14 +9,15 @@ defaults:
 
 model:
   pretrained: false
+  dropout: 0.5
 
 training:
-  epochs: 120
-  lr: 1.0e-3               # R(2+1)D trains better at higher LR from scratch
+  epochs: 60
+  lr: 1.0e-3
   batch_size: 32            # 3D model uses more memory than 2D
-  weight_decay: 1.0e-4
-  label_smoothing: 0.1
-  warmup_epochs: 10
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
@@ -32,6 +33,6 @@ training:
   equivariant_reverse_prob: 0.5
 
   use_mixup: true
-  mixup_alpha: 0.3
+  mixup_alpha: 0.8
   use_cutmix: true
-  cutmix_alpha: 0.4
+  cutmix_alpha: 1.0

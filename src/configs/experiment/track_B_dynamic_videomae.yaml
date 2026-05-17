@@ -1,0 +1,49 @@
+# @package _global_
+# Track B — DynamicVideoMAE: VideoMAE-Large-SSv2 + Temporal Pyramid head.
+#
+# Architecture advances over MotionVideoMAE/FrozenVideoMAELarge:
+#
+#   1. VideoMAE-Large (307M, 24 blocks, 1024-dim) — 4× more params than Base
+#   2. SSv2 pretraining — same distribution as our 33 challenge classes
+#   3. Temporal Pyramid head (8 features × 1024 = 8192):
+#        f0, f1, f2, f3 = features at all 4 original frame positions
+#        global          = mean over all 8 temporal groups
+#        delta_full      = f3 - f0  (net motion)
+#        delta_first     = f1 - f0  (first-half motion)
+#        delta_last      = f3 - f2  (second-half motion)
+#      delta_first vs delta_last captures acceleration/deceleration and
+#      U-shaped trajectories (pick up then put back: delta_full≈0 but both halves ≠0)
+#   4. Fine-tune last 12 of 24 blocks with LLRD (vs 4 in previous configs)
+#
+# Memory: 12 blocks of backprop through 307M-param model at batch=4
+# → ~12-15 GB peak on 25 GB GPU, safe with grad_accum.
+defaults:
+  - override /model: dynamic_videomae
+
+model:
+  num_frozen_blocks: 12   # fine-tune last 12 of 24 blocks
+  dropout: 0.3
+
+training:
+  epochs: 35
+  lr: 1.0e-4             # head LR
+  backbone_lr_scale: 0.1  # last block: 1e-5; earlier blocks decay via LLRD
+  llrd_factor: 0.85       # geometric decay per block depth
+  batch_size: 4
+  grad_accum_steps: 16   # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

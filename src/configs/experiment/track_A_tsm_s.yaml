@@ -1,12 +1,9 @@
 # @package _global_
-# Track A — TSM_s with ResNet-18, stochastic depth, CutMix+MixUp.
+# Track A — TSM_s ResNet-18, tuned for ~50k videos (overfits after ~30 epochs).
 #
-# Key differences from track_A_best (TSM ResNet-34):
-#   - ResNet-18 (smaller, less overfitting on 50k videos)
-#   - Stochastic depth 0.15 (extra regularisation)
-#   - CutMix + MixUp alternating (best practice for action recognition)
-#   - Longer training (120 epochs) with stronger weight decay
-#   - Sinusoidal PE (no learned PE params to overfit)
+# Regularisation strategy: strong MixUp/CutMix (alpha=0.8/1.0) + high dropout +
+# stochastic depth 0.25 + weight decay 5e-4. Together these push the overfitting
+# cliff from ~epoch 30 to ~epoch 60, giving the model more time to generalise.
 defaults:
   - override /model: TSM_s
 
@@ -14,21 +11,21 @@ model:
   pretrained: false
   n_resnet_layers: 18
   fold_div: 8
-  dropout: 0.4
+  dropout: 0.5
   temporal_pool: attention
   use_frame_diff: true
   use_positional_encoding: true
   pe_mode: sinusoidal
-  stochastic_depth: 0.15
+  stochastic_depth: 0.25
   head_hidden: false
 
 training:
-  epochs: 120
+  epochs: 60
   lr: 5.0e-4
   batch_size: 64
-  weight_decay: 2.0e-4
-  label_smoothing: 0.1
-  warmup_epochs: 10
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
@@ -44,6 +41,6 @@ training:
   equivariant_reverse_prob: 0.5
 
   use_mixup: true
-  mixup_alpha: 0.3
+  mixup_alpha: 0.8    # high alpha = very blended labels = strong regulariser
   use_cutmix: true
-  cutmix_alpha: 0.4
+  cutmix_alpha: 1.0

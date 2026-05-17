@@ -76,7 +76,7 @@ def build_backbone(arch: str = "resnet18", use_tsm: bool = False, n_segment: int
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--arch",       default="resnet18")
-    parser.add_argument("--epochs",     type=int,   default=30)
+    parser.add_argument("--epochs",     type=int,   default=20)
     parser.add_argument("--lr",         type=float, default=1e-3)
     parser.add_argument("--batch_size", type=int,   default=128)
     parser.add_argument("--num_workers",type=int,   default=4)

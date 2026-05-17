@@ -34,6 +34,7 @@ from models.videomae import VideoMAEClassifier
 from models.motion_videomae import MotionVideoMAE
 from models.frozen_videomae import FrozenVideoMAELarge
 from models.qwen_vl_video import QwenVLVideo
+from models.dynamic_videomae import DynamicVideoMAE
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -198,6 +199,13 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
             dropout=float(cfg.model.get("dropout", 0.5)),
+        )
+    if name == "dynamic_videomae":
+        return DynamicVideoMAE(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

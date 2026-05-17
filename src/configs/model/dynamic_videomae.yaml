@@ -1,0 +1,5 @@
+name: dynamic_videomae
+num_classes: 33
+backbone: MCG-NJU/videomae-large-finetuned-ssv2
+num_frozen_blocks: 12
+dropout: 0.3
