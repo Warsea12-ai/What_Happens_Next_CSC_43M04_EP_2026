@@ -71,7 +71,6 @@ class FrozenVideoMAELarge(nn.Module):
         # Freeze every backbone parameter — no gradients through encoder ever
         for p in self.encoder.parameters():
             p.requires_grad = False
-        self.encoder.eval()
 
         hidden = self.encoder.config.hidden_size  # 1024
 
@@ -81,13 +80,14 @@ class FrozenVideoMAELarge(nn.Module):
         self.norm_last   = nn.LayerNorm(hidden)
         self.norm_delta  = nn.LayerNorm(hidden)
 
-        # MLP head: 4×1024 → 2048 → num_classes
+        # Compact MLP head: 4×1024=4096 → 512 → num_classes (~2M trainable params)
+        # A larger head (4096→2048) overfits with only 50k training videos.
         self.head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(4 * hidden, 2 * hidden),
+            nn.Linear(4 * hidden, 512),
             nn.GELU(),
             nn.Dropout(dropout * 0.5),
-            nn.Linear(2 * hidden, num_classes),
+            nn.Linear(512, num_classes),
         )
         nn.init.trunc_normal_(self.head[-1].weight, std=0.01)
         nn.init.zeros_(self.head[-1].bias)
@@ -96,6 +96,13 @@ class FrozenVideoMAELarge(nn.Module):
         n_train  = sum(p.numel() for p in self.head_parameters())
         print(f"FrozenVideoMAELarge: {n_frozen/1e6:.1f}M frozen backbone, "
               f"{n_train/1e6:.3f}M trainable head")
+
+    def train(self, mode: bool = True):
+        # Keep the frozen encoder in eval mode at all times so its dropout/batchnorm
+        # layers behave deterministically — calling model.train() must not undo this.
+        super().train(mode)
+        self.encoder.eval()
+        return self
 
     # ── parameter groups ──────────────────────────────────────────────────────
 
