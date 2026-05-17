@@ -293,8 +293,16 @@ class TSM_s(nn.Module):
 
         # ---- Load SSL-pretrained backbone (optional) -----------------------
         if pretrained_backbone_path is not None:
-            import torch as _torch
-            ckpt = _torch.load(pretrained_backbone_path, map_location="cpu")
+            import os, torch as _torch
+            if not os.path.exists(pretrained_backbone_path):
+                raise FileNotFoundError(
+                    f"SSL backbone not found: {pretrained_backbone_path}\n"
+                    "Run pretraining first:\n"
+                    "  python pretrain_ssl_trackA.py --arch resnet18 --use_tsm "
+                    "--epochs 30 --out ssl_tsm_backbone.pt"
+                )
+            ckpt = _torch.load(pretrained_backbone_path, map_location="cpu",
+                               weights_only=False)
             self.backbone.load_state_dict(ckpt["backbone_state_dict"])
             print(f"Loaded TSM SSL backbone from {pretrained_backbone_path} "
                   f"(val_acc={ckpt.get('val_acc', '?'):.4f})")
