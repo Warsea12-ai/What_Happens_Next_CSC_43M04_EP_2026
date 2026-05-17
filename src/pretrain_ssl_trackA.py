@@ -196,9 +196,10 @@ def main() -> None:
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
                 if args.multi_task:
                     order_logits, pos_logits = ssl(order_clips, shuffled_clips)
-                    B, T = pos_labels.shape
+                    n_batch, n_frames = pos_labels.shape
                     order_loss = loss_fn(order_logits, order_labels)
-                    pos_loss   = loss_fn(pos_logits.reshape(B * T, 4), pos_labels.reshape(B * T))
+                    pos_loss   = loss_fn(pos_logits.reshape(n_batch * n_frames, 4),
+                                         pos_labels.reshape(n_batch * n_frames))
                     loss = order_loss + 0.5 * pos_loss
                 else:
                     order_logits = ssl(order_clips)
