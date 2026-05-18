@@ -178,7 +178,8 @@ class FramePairNet(nn.Module):
         ).expand(B, 3)
 
         with torch.no_grad():
-            tokens = self.visual(pixel_values, grid_thw=grid_thw)  # (B*64, 1536)
+            out = self.visual(pixel_values, grid_thw=grid_thw)
+            tokens = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
 
         return tokens.reshape(B, _N_TOKENS, -1)   # (B, 64, 1536)
 
