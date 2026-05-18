@@ -53,7 +53,13 @@ def load_model_from_checkpoint(checkpoint: Dict[str, Any], device: torch.device)
             "Checkpoint has no 'config' entry. Train with the current train.py so the "
             "full Hydra config is saved with the weights."
         )
-    cfg = OmegaConf.create(checkpoint["config"])
+    raw_cfg = checkpoint["config"]
+    # Old checkpoints (pre-Hydra refactor) store a flat model dict with no 'model' subkey.
+    # Wrap it into the shape build_model() expects: cfg.model.* and cfg.dataset.num_frames.
+    if isinstance(raw_cfg, dict) and "model" not in raw_cfg:
+        num_frames = raw_cfg.get("n_segment") or checkpoint.get("num_frames", 4)
+        raw_cfg = {"model": raw_cfg, "dataset": {"num_frames": int(num_frames)}}
+    cfg = OmegaConf.create(raw_cfg)
     model = build_model(cfg)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)

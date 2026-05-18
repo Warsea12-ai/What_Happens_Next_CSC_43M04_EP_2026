@@ -58,8 +58,11 @@ class FrozenVideoMAELarge(nn.Module):
         num_classes: int = 33,
         backbone: str = "MCG-NJU/videomae-large-finetuned-kinetics",
         dropout: float = 0.5,
+        num_unfrozen_blocks: int = 0,
+        head_hidden: int = 512,
     ) -> None:
         super().__init__()
+        self.num_unfrozen_blocks = num_unfrozen_blocks
 
         # Load full classification model, then keep only the backbone
         _full = VideoMAEForVideoClassification.from_pretrained(
@@ -68,48 +71,63 @@ class FrozenVideoMAELarge(nn.Module):
         self.encoder = _full.videomae   # VideoMAEModel, 307M params
         del _full                       # free the 400-class head immediately
 
-        # Freeze every backbone parameter — no gradients through encoder ever
+        # Freeze all backbone params, then selectively unfreeze last N blocks
         for p in self.encoder.parameters():
             p.requires_grad = False
+        if num_unfrozen_blocks > 0:
+            blocks = self.encoder.encoder.layer
+            for block in blocks[-num_unfrozen_blocks:]:
+                for p in block.parameters():
+                    p.requires_grad = True
+            for p in self.encoder.layernorm.parameters():
+                p.requires_grad = True
 
         hidden = self.encoder.config.hidden_size  # 1024
 
-        # Independent LayerNorms so each feature type is properly scaled
+        # Independent LayerNorms for each temporal feature
         self.norm_global = nn.LayerNorm(hidden)
         self.norm_first  = nn.LayerNorm(hidden)
+        self.norm_mid    = nn.LayerNorm(hidden)
         self.norm_last   = nn.LayerNorm(hidden)
         self.norm_delta  = nn.LayerNorm(hidden)
 
-        # Compact MLP head: 4×1024=4096 → 512 → num_classes (~2M trainable params)
-        # A larger head (4096→2048) overfits with only 50k training videos.
+        # Head: [global, first, mid, last, delta] = 5×1024=5120 → head_hidden → num_classes
         self.head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(4 * hidden, 512),
+            nn.Linear(5 * hidden, head_hidden),
             nn.GELU(),
             nn.Dropout(dropout * 0.5),
-            nn.Linear(512, num_classes),
+            nn.Linear(head_hidden, num_classes),
         )
         nn.init.trunc_normal_(self.head[-1].weight, std=0.01)
         nn.init.zeros_(self.head[-1].bias)
 
-        n_frozen = sum(p.numel() for p in self.encoder.parameters())
-        n_train  = sum(p.numel() for p in self.head_parameters())
-        print(f"FrozenVideoMAELarge: {n_frozen/1e6:.1f}M frozen backbone, "
-              f"{n_train/1e6:.3f}M trainable head")
+        n_frozen = sum(p.numel() for p in self.parameters() if not p.requires_grad)
+        n_train  = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"FrozenVideoMAELarge: {n_frozen/1e6:.1f}M frozen, {n_train/1e6:.2f}M trainable")
 
     def train(self, mode: bool = True):
-        # Keep the frozen encoder in eval mode at all times so its dropout/batchnorm
-        # layers behave deterministically — calling model.train() must not undo this.
         super().train(mode)
-        self.encoder.eval()
+        # Keep fully-frozen blocks in eval mode; only unfrozen blocks follow mode
+        if self.num_unfrozen_blocks == 0:
+            self.encoder.eval()
+        else:
+            self.encoder.eval()
+            blocks = self.encoder.encoder.layer
+            for block in blocks[-self.num_unfrozen_blocks:]:
+                block.train(mode)
         return self
 
     # ── parameter groups ──────────────────────────────────────────────────────
+
+    def backbone_parameters(self):
+        return [p for p in self.encoder.parameters() if p.requires_grad]
 
     def head_parameters(self):
         return (
             list(self.norm_global.parameters())
             + list(self.norm_first.parameters())
+            + list(self.norm_mid.parameters())
             + list(self.norm_last.parameters())
             + list(self.norm_delta.parameters())
             + list(self.head.parameters())
@@ -132,26 +150,28 @@ class FrozenVideoMAELarge(nn.Module):
         # 4 frames → 16 via linear interpolation
         x = _linear_upsample(x, _TARGET_FRAMES)
 
-        # Frozen backbone — no gradient tape, activations freed immediately
-        with torch.no_grad():
+        no_grad = self.num_unfrozen_blocks == 0
+        with torch.no_grad() if no_grad else torch.enable_grad():
             tokens = self.encoder(pixel_values=x).last_hidden_state  # (B, 1568, 1024)
 
         # Cast to head dtype (bfloat16 backbone → float32 head is fine)
         tokens = tokens.to(dtype)
 
-        # Temporal × spatial grid
+        # Temporal × spatial grid: 8 temporal groups × 196 spatial patches
         tokens = tokens.view(B, _N_TEMPORAL, _N_SPATIAL, -1)  # (B, 8, 196, 1024)
 
-        global_feat = tokens.mean(dim=(1, 2))       # scene context
-        first       = tokens[:, 0].mean(dim=1)      # start of action
-        last        = tokens[:, -1].mean(dim=1)     # end of action
-        delta       = last - first                  # net motion direction
+        global_feat = tokens.mean(dim=(1, 2))                   # full scene context
+        first       = tokens[:, 0].mean(dim=1)                  # start of action (t=0)
+        mid         = tokens[:, 3:5].mean(dim=(1, 2))           # midpoint (t=3,4)
+        last        = tokens[:, -1].mean(dim=1)                 # end of action (t=7)
+        delta       = last - first                              # net motion direction
 
         feat = torch.cat([
             self.norm_global(global_feat),
             self.norm_first(first),
+            self.norm_mid(mid),
             self.norm_last(last),
             self.norm_delta(delta),
-        ], dim=1)  # (B, 4096)
+        ], dim=1)  # (B, 5120)
 
         return self.head(feat)

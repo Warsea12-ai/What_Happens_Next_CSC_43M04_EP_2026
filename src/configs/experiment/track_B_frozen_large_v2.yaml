@@ -1,0 +1,44 @@
+# @package _global_
+# Track B — FrozenVideoMAELarge v2: SSv2 backbone + richer temporal head.
+#
+# Improvements over track_B_frozen_large:
+#   1. SSv2 backbone instead of Kinetics — same domain as our challenge
+#   2. Mid temporal token added: head sees [global, first, mid, last, delta]
+#      = 5×1024=5120 instead of 4×1024=4096
+#   3. Larger head: 5120 → 1024 → 33 (was 4096 → 512 → 33)
+#   4. Last 4 of 24 blocks unfrozen with backbone_lr_scale=0.01 (very gentle)
+#   5. Mixup enabled — head receives smoother supervision signal
+defaults:
+  - override /model: frozen_videomae
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  dropout: 0.4
+  num_unfrozen_blocks: 4
+  head_hidden: 1024
+
+training:
+  epochs: 80
+  lr: 3.0e-4
+  backbone_lr_scale: 0.01      # unfrozen blocks get 3e-6 — very gentle nudge
+  batch_size: 32               # reduced: unfreezing 4 blocks increases memory
+  grad_accum_steps: 2          # effective batch = 64
+  weight_decay: 1e-3
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.4
