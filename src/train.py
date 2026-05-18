@@ -548,7 +548,19 @@ def main(cfg: DictConfig) -> None:
     model = build_model(cfg).to(device)
 
     label_smoothing = float(cfg.training.get("label_smoothing", 0.0))
-    loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    use_class_weights = bool(cfg.training.get("use_class_weights", False))
+    if use_class_weights:
+        n_cls = int(cfg.model.num_classes)
+        counts = torch.zeros(n_cls)
+        for _, cls_idx in train_samples:
+            counts[cls_idx] += 1
+        weights = 1.0 / counts.clamp(min=1)
+        weights = (weights / weights.sum() * n_cls).to(device)
+        loss_fn = nn.CrossEntropyLoss(weight=weights, label_smoothing=label_smoothing)
+        print(f"  Class-balanced loss weights — min: {weights.min():.3f}, max: {weights.max():.3f}")
+        print(f"  Class counts — min: {int(counts.min())}, max: {int(counts.max())}, mean: {counts.mean():.0f}")
+    else:
+        loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
     weight_decay = float(cfg.training.get("weight_decay", 0.0))
     optimizer = torch.optim.AdamW(

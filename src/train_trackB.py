@@ -360,6 +360,7 @@ def main(cfg: DictConfig) -> None:
     train_dataset = VideoFrameDataset(
         root_dir=train_dir, num_frames=int(cfg.dataset.num_frames),
         transform=train_transform, sample_list=train_samples,
+        temporal_jitter=int(cfg.training.get("temporal_jitter", 0)),
     )
     val_dataset = VideoFrameDataset(
         root_dir=train_dir, num_frames=int(cfg.dataset.num_frames),

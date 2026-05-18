@@ -34,3 +34,5 @@ training:
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
+
+  temporal_jitter: 1        # ±1 frame random shift during training

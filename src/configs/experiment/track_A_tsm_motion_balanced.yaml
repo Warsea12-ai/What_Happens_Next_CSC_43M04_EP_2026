@@ -1,0 +1,47 @@
+# @package _global_
+# Track A — TSM_s + motion-aware head + class-balanced loss.
+#
+# Identical to track_A_tsm_motion except use_class_weights=true: the CE loss
+# is weighted by inverse class frequency so minority classes contribute
+# proportionally to majority ones during training.
+defaults:
+  - override /model: TSM_s
+
+model:
+  n_resnet_layers: 34
+  fold_div: 8
+  dropout: 0.4
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.15
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 64
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_class_weights: true
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.3
+  use_cutmix: true
+  cutmix_alpha: 0.4
