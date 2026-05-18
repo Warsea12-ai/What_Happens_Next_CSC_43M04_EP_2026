@@ -168,7 +168,8 @@ class QwenVLVideo(nn.Module):
             out = self.visual(pixel_values, grid_thw=grid_thw)
 
         # visual encoder returns post-merger tokens directly: (B * tg * hpo * wpo, hidden)
-        tokens = out.to(dtype)                          # (B*128, 1536)
+        raw = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
+        tokens = raw.to(dtype)                          # (B*128, 1536)
         tokens = tokens.reshape(B, tg, hpo * wpo, -1)  # (B, 2, 64, 1536)
 
         global_feat = tokens.mean(dim=(1, 2))           # (B, 1536) — all 128 tokens
