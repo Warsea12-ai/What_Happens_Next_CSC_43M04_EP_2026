@@ -35,6 +35,7 @@ from models.motion_videomae import MotionVideoMAE
 from models.frozen_videomae import FrozenVideoMAELarge
 from models.qwen_vl_video import QwenVLVideo
 from models.dynamic_videomae import DynamicVideoMAE
+from models.frame_pair_net import FramePairNet
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -203,8 +204,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "dynamic_videomae":
         return DynamicVideoMAE(
             num_classes=int(cfg.model.num_classes),
-            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+        )
+    if name == "frame_pair_net":
+        return FramePairNet(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
+            n_cross_layers=int(cfg.model.get("n_cross_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")

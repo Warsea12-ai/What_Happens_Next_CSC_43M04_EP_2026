@@ -1,0 +1,50 @@
+# @package _global_
+# Track B — FramePairNet: cross-frame spatial attention as state-transition detection.
+#
+# Architectural paradigm: fundamentally different from all other Track B models.
+#
+# Existing models process all 4 frames as a TEMPORAL SEQUENCE through a video
+# backbone, then pool temporal features. This discards spatial structure of change.
+#
+# FramePairNet treats the task as a STATE TRANSITION problem:
+#   frames 0-1 → visual encoder → before_tokens (B, 64, 1536)  [initial state]
+#   frames 2-3 → visual encoder → after_tokens  (B, 64, 1536)  [final state]
+#   CrossAttention(before → after) → transition_tokens          [what changed?]
+#
+# Per-patch cross-attention: each of the 64 spatial patches in the before-state
+# attends to all 64 patches of the after-state. This captures spatially-grounded
+# changes (object appeared/disappeared, hand position, contact point) that
+# CLS-level delta misses.
+#
+# Trainable: ~25M (2 cross-attention blocks + head)
+# Frozen: 665M (Qwen2-VL-2B visual encoder)
+defaults:
+  - override /model: frame_pair_net
+
+model:
+  n_cross_layers: 2
+  n_heads: 8
+  dropout: 0.3
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0    # encoder is frozen
+  batch_size: 32            # two encoder calls per sample → moderate memory
+  grad_accum_steps: 2       # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
