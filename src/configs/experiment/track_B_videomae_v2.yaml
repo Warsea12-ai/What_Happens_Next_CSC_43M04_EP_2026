@@ -1,0 +1,33 @@
+# @package _global_
+# Track B — VideoMAE-Base SSv2, more unfrozen blocks + stronger augmentation.
+# Unfreezes 8 of 12 blocks (was 6), lower LR to compensate, 60 epochs.
+defaults:
+  - override /model: videomae
+
+model:
+  num_frozen_blocks: 4
+  dropout: 0.2
+  frames_repeat: 4
+
+training:
+  epochs: 60
+  lr: 3.0e-5
+  backbone_lr_scale: 0.1
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

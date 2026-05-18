@@ -81,10 +81,16 @@ def collect_video_samples(root_dir: Path) -> List[Tuple[Path, int]]:
     return samples
 
 
-def _pick_frame_indices(num_available: int, num_frames: int) -> List[int]:
-    """
-    Evenly spaced indices in [0, num_available - 1], inclusive.
-    If fewer frames than requested, indices may repeat (last frame duplicated).
+def _pick_frame_indices(
+    num_available: int,
+    num_frames: int,
+    temporal_jitter: int = 0,
+) -> List[int]:
+    """Evenly spaced indices in [0, num_available - 1], with optional random jitter.
+
+    temporal_jitter > 0 shifts each sampled index by a random offset in
+    [-temporal_jitter, +temporal_jitter], clamped to valid range.
+    Use during training only; keep 0 for deterministic eval.
     """
     if num_available <= 0:
         raise ValueError("Video has no frames.")
@@ -94,9 +100,15 @@ def _pick_frame_indices(num_available: int, num_frames: int) -> List[int]:
     if num_available == 1:
         return [0] * num_frames
 
-    # linspace in index space
     positions = torch.linspace(0, num_available - 1, steps=num_frames)
     indices = [int(round(float(x))) for x in positions]
+
+    if temporal_jitter > 0:
+        indices = [
+            max(0, min(num_available - 1, idx + int(torch.randint(-temporal_jitter, temporal_jitter + 1, (1,)))))
+            for idx in indices
+        ]
+
     return indices
 
 
@@ -107,17 +119,21 @@ class VideoFrameDataset(Dataset):
         num_frames: int,
         transform: Callable[[Image.Image], torch.Tensor],
         sample_list: Optional[List[Tuple[Path, int]]] = None,
+        temporal_jitter: int = 0,
     ) -> None:
         """
         Args:
             root_dir: Split root (contains class folders).
             num_frames: T in the returned tensor (T, C, H, W).
-            transform: Applied independently to each PIL image (typically Resize + ToTensor + Normalize).
-            sample_list: Optional pre-built list of (video_dir, label). Use for train/val splits.
+            transform: Applied independently to each PIL image.
+            sample_list: Optional pre-built list of (video_dir, label).
+            temporal_jitter: Random ±offset applied to each sampled frame index.
+                             Set >0 during training for temporal diversity; keep 0 for eval.
         """
         self.root_dir = Path(root_dir)
         self.num_frames = num_frames
         self.transform = transform
+        self.temporal_jitter = temporal_jitter
 
         if sample_list is None:
             self.samples = collect_video_samples(self.root_dir)
@@ -130,7 +146,7 @@ class VideoFrameDataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         video_dir, label = self.samples[index]
         frame_paths = _list_frame_paths(video_dir)
-        indices = _pick_frame_indices(len(frame_paths), self.num_frames)
+        indices = _pick_frame_indices(len(frame_paths), self.num_frames, self.temporal_jitter)
 
         frames: List[torch.Tensor] = []
         for frame_index in indices:
