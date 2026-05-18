@@ -351,6 +351,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
             temporal_heads=int(cfg.model.get("temporal_heads", 8)),
         )
 
+    if name == "X3D":
+        return X3D(
+            num_classes=int(cfg.model.num_classes),
+            input_clip_length=int(cfg.dataset.num_frames),
+            variant=str(cfg.model.get("variant", "xs")),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            use_frame_diff=bool(cfg.model.get("use_frame_diff", False)),
+            drop_path_rate=float(cfg.model.get("stochastic_depth", 0.2)),
+        )
+
     raise ValueError(f"Unknown model.name: {name}")
 
 

@@ -1,26 +1,24 @@
-"""QwenVLVideo — Qwen2-VL-2B visual encoder (665M, frozen) + motion-aware head.
+"""QwenVLVideo — Qwen2-VL visual encoder (frozen) + motion-aware head.
 
-The Qwen2-VL visual encoder is a 1536-dim, 32-layer ViT trained on massive
-image + video language data — far richer semantic pretraining than VideoMAE.
-It is extracted from `Qwen/Qwen2-VL-2B-Instruct`, frozen completely, and
-paired with our motion-aware classification head.
+Works with any Qwen2-VL checkpoint (2B or 7B). The full model is loaded to
+CPU, the visual encoder is extracted, and the LLM is deleted before moving
+the encoder to GPU. The head dimension auto-adapts to the encoder's hidden_size.
 
-Loading: the full 2B model (~4 GB bf16) is loaded to CPU, the visual encoder
-(665M) is extracted, and the language model is deleted before moving to GPU.
+  2B (Qwen/Qwen2-VL-2B-Instruct):  hidden=1536, head_hidden=512  default
+  7B (Qwen/Qwen2-VL-7B-Instruct):  hidden=3584, head_hidden=1024 recommended
 
 Patch format (Qwen2-VL's Conv3d tubelet embedding):
   4 frames at 224×224, patch_size=14, temporal_patch_size=2, spatial_merge=2
   → 2 temporal groups × 16×16 spatial patches = 512 patches per video (input)
   → 2 temporal groups × 8×8 merged tokens = 128 tokens per video (output)
-  → visual encoder output (plain tensor): (B × 128, 1536)
 
 Head (motion-aware):
-  global = mean(all 128 tokens)              — what action / what scene
-  first  = mean(temporal-group-0 tokens)     — frames 0-1 state
-  last   = mean(temporal-group-1 tokens)     — frames 2-3 state
-  delta  = last − first                      — net motion direction
-  → cat([global, first, last, delta]) = (B, 4×1536=6144)
-  → Dropout → Linear(6144, 512) → GELU → Dropout → Linear(512, 33)
+  global = mean(all 128 tokens)   — what action / what scene
+  first  = mean(temporal-group-0) — frames 0-1 state
+  last   = mean(temporal-group-1) — frames 2-3 state
+  delta  = last − first           — net motion direction
+  → cat([global, first, last, delta]) → Dropout → Linear(4×hidden, head_hidden)
+  → GELU → Dropout → Linear(head_hidden, num_classes)
 
 Input : (B, T=4, C, H, W)  ImageNet-normalised
 Output: (B, num_classes)
@@ -80,51 +78,50 @@ class QwenVLVideo(nn.Module):
         num_classes: int = 33,
         backbone: str = "Qwen/Qwen2-VL-2B-Instruct",
         dropout: float = 0.5,
+        head_hidden: int = 512,
     ) -> None:
         super().__init__()
         from transformers import Qwen2VLForConditionalGeneration
 
-        print(f"Loading {backbone} to CPU (≈4 GB bf16)…")
+        print(f"Loading {backbone} to CPU…")
         _full = Qwen2VLForConditionalGeneration.from_pretrained(
             backbone,
             dtype=torch.bfloat16,
         )
-        self.visual = _full.model.visual   # Qwen2VisionTransformerPretrainedModel, 665M
+        self.visual = _full.model.visual
         del _full
         gc.collect()
-        print("LLM deleted — keeping only visual encoder (665M).")
+        print("LLM deleted — keeping visual encoder only.")
 
-        # Freeze every parameter in the visual encoder
         for p in self.visual.parameters():
             p.requires_grad = False
 
         vcfg = self.visual.config
-        self.patch_size         = vcfg.patch_size           # 14
+        self.patch_size          = vcfg.patch_size           # 14
         self.temporal_patch_size = vcfg.temporal_patch_size  # 2
         self.spatial_merge_size  = vcfg.spatial_merge_size   # 2
-        hidden = vcfg.hidden_size                            # 1536
+        hidden = vcfg.hidden_size                            # 1536 (2B) or 3584 (7B)
 
-        # Separate LayerNorms keep each feature type well-scaled before concat
         self.norm_global = nn.LayerNorm(hidden)
         self.norm_first  = nn.LayerNorm(hidden)
         self.norm_last   = nn.LayerNorm(hidden)
         self.norm_delta  = nn.LayerNorm(hidden)
 
-        # Head: 4 × 1536 = 6144 → 512 → num_classes
         self.head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(4 * hidden, 512),
+            nn.Linear(4 * hidden, head_hidden),
             nn.GELU(),
             nn.Dropout(dropout * 0.5),
-            nn.Linear(512, num_classes),
+            nn.Linear(head_hidden, num_classes),
         )
         nn.init.trunc_normal_(self.head[-1].weight, std=0.01)
         nn.init.zeros_(self.head[-1].bias)
 
         n_frozen = sum(p.numel() for p in self.visual.parameters())
         n_train  = sum(p.numel() for p in self.head_parameters())
-        print(f"QwenVLVideo: {n_frozen/1e6:.0f}M frozen visual encoder, "
-              f"{n_train/1e6:.3f}M trainable head")
+        print(f"QwenVLVideo: {n_frozen/1e6:.0f}M frozen, "
+              f"{n_train/1e6:.2f}M trainable  "
+              f"(hidden={hidden}, head_hidden={head_hidden})")
 
     def train(self, mode: bool = True):
         super().train(mode)

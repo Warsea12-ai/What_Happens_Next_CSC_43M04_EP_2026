@@ -1,0 +1,44 @@
+# @package _global_
+# Track B — Qwen2-VL-7B visual encoder (frozen) + motion-aware head.
+#
+# Biggest available visual backbone: 7B model, 3584-dim tokens.
+# Encoder is fully frozen — only the head trains.
+#
+# Memory budget (25 GB GPU):
+#   Visual encoder weights (bf16): ~7-8 GB
+#   Frozen inference activations (batch=8): ~3-4 GB
+#   Trainable head + gradients: negligible
+#   Total: ~12 GB — safe with batch=8, grad_accum=8 (effective batch=64)
+#
+# Head: [global, first, last, delta] (4×3584=14336) → Linear(14336,1024)
+#       → GELU → Linear(1024,33)
+defaults:
+  - override /model: qwen2_vl_7b
+
+model:
+  dropout: 0.4
+
+training:
+  epochs: 60
+  lr: 3.0e-4             # head only — encoder frozen, can be aggressive
+  backbone_lr_scale: 0.0
+  batch_size: 8
+  grad_accum_steps: 8    # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  temporal_jitter: 1

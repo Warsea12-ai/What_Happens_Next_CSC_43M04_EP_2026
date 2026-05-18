@@ -200,6 +200,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
             dropout=float(cfg.model.get("dropout", 0.5)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "qwen2_vl_7b":
+        return QwenVLVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-7B-Instruct")),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
     if name == "dynamic_videomae":
         return DynamicVideoMAE(
