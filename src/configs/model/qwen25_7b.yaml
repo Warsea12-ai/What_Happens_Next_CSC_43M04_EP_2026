@@ -1,0 +1,5 @@
+name: qwen25_7b
+num_classes: ${num_classes}
+backbone: Qwen/Qwen2.5-VL-7B-Instruct
+dropout: 0.4
+head_hidden: 768

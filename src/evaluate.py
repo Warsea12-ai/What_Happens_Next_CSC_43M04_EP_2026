@@ -23,7 +23,7 @@ import train as _train_a
 import train_trackB as _train_b
 from utils import build_transforms, set_seed
 
-_TRACK_B_MODELS = {"videomae", "motion_videomae", "frozen_videomae", "swin3d_finetune", "vit_temporal", "qwen_vl_video", "dynamic_videomae", "frame_pair_net", "qwen2_vl_7b"}
+_TRACK_B_MODELS = {"videomae", "motion_videomae", "frozen_videomae", "swin3d_finetune", "vit_temporal", "qwen_vl_video", "dynamic_videomae", "frame_pair_net", "qwen2_vl_7b", "qwen25_7b", "dual_encoder"}
 
 
 def build_model(cfg):

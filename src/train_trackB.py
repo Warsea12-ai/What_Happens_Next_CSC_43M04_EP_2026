@@ -36,6 +36,7 @@ from models.frozen_videomae import FrozenVideoMAELarge
 from models.qwen_vl_video import QwenVLVideo
 from models.dynamic_videomae import DynamicVideoMAE
 from models.frame_pair_net import FramePairNet
+from models.dual_encoder import DualEncoder
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -211,6 +212,13 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.4)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
+    if name == "qwen25_7b":
+        return QwenVLVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2.5-VL-7B-Instruct")),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+            head_hidden=int(cfg.model.get("head_hidden", 768)),
+        )
     if name == "dynamic_videomae":
         return DynamicVideoMAE(
             num_classes=int(cfg.model.num_classes),
@@ -225,6 +233,15 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_cross_layers=int(cfg.model.get("n_cross_layers", 2)),
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "dual_encoder":
+        return DualEncoder(
+            num_classes=int(cfg.model.num_classes),
+            videomae_backbone=str(cfg.model.get("videomae_backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
+            qwen_backbone=str(cfg.model.get("qwen_backbone", "Qwen/Qwen2-VL-7B-Instruct")),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

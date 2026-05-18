@@ -1,0 +1,44 @@
+# @package _global_
+# Track B — VideoMAE-Large (Kinetics), last 6/24 blocks unfrozen.
+#
+# Middle ground between fully frozen (fast, lower ceiling) and full fine-tune
+# (slow, overfitting risk). Unfreezing the last 6 blocks gives the model room
+# to specialise its high-level features for our 33 classes while keeping the
+# first 18 blocks as a stable feature extractor.
+#
+# LR hierarchy:
+#   head           : lr = 5e-4
+#   last 6 blocks  : lr × backbone_lr_scale = 5e-5  (very gentle)
+#   first 18 blocks: frozen
+defaults:
+  - override /model: frozen_videomae
+
+model:
+  dropout: 0.4
+  num_unfrozen_blocks: 6
+  head_hidden: 512
+
+training:
+  epochs: 60
+  lr: 5.0e-4
+  backbone_lr_scale: 0.1   # unfrozen blocks get 5e-5
+  batch_size: 16            # smaller than fully-frozen (need backprop through 6 blocks)
+  grad_accum_steps: 4       # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  temporal_jitter: 1

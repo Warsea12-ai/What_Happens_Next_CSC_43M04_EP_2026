@@ -79,8 +79,9 @@ class FrozenVideoMAELarge(nn.Module):
             for block in blocks[-num_unfrozen_blocks:]:
                 for p in block.parameters():
                     p.requires_grad = True
-            for p in self.encoder.layernorm.parameters():
-                p.requires_grad = True
+            if self.encoder.layernorm is not None:
+                for p in self.encoder.layernorm.parameters():
+                    p.requires_grad = True
 
         hidden = self.encoder.config.hidden_size  # 1024
 

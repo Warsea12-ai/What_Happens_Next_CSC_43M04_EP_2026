@@ -96,42 +96,60 @@ class FramePairNet(nn.Module):
         n_cross_layers: int = 2,
         n_heads: int = 8,
         dropout: float = 0.3,
+        head_hidden: int = 512,
     ) -> None:
         super().__init__()
-        from transformers import Qwen2VLForConditionalGeneration
-
         print(f"Loading {backbone} to CPU…")
-        _full = Qwen2VLForConditionalGeneration.from_pretrained(
-            backbone, dtype=torch.bfloat16,
-        )
+        if "2.5" in backbone:
+            from transformers import Qwen2_5_VLForConditionalGeneration
+            _full = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                backbone, dtype=torch.bfloat16,
+            )
+        else:
+            from transformers import Qwen2VLForConditionalGeneration
+            _full = Qwen2VLForConditionalGeneration.from_pretrained(
+                backbone, dtype=torch.bfloat16,
+            )
         self.visual = _full.model.visual
         del _full
         gc.collect()
-        print("LLM deleted — keeping visual encoder (665M).")
+        print("LLM deleted — keeping visual encoder only.")
 
         for p in self.visual.parameters():
             p.requires_grad = False
 
         vcfg = self.visual.config
-        hidden = vcfg.hidden_size   # 1536
+        self.spatial_merge_size = getattr(vcfg, "spatial_merge_size", 2)
 
-        # Cross-frame attention: before-state queries attend to after-state
+        # Probe actual output dim — config.hidden_size can be the LLM dim, not the
+        # visual encoder output dim (e.g. 7B merger outputs 5120, not 3584).
+        _ps, _tps = vcfg.patch_size, vcfg.temporal_patch_size
+        _H, _W = 224, 224
+        _tg = 2 // _tps if 2 >= _tps else 1
+        _hp, _wp = _H // _ps, _W // _ps
+        _dummy_pv = torch.zeros(
+            _tg * _hp * _wp, 3 * _tps * _ps * _ps, dtype=torch.bfloat16,
+        )
+        _dummy_grid = torch.tensor([[_tg, _hp, _wp]], dtype=torch.long)
+        with torch.no_grad():
+            _out = self.visual(_dummy_pv, grid_thw=_dummy_grid)
+            _raw = _out.last_hidden_state if hasattr(_out, "last_hidden_state") else _out
+        hidden = int(_raw.shape[-1])
+
         self.cross_layers = nn.ModuleList([
             _CrossAttnBlock(hidden, n_heads, dropout)
             for _ in range(n_cross_layers)
         ])
 
-        # Per-feature norms before concat
         self.norm_transition = nn.LayerNorm(hidden)
         self.norm_delta      = nn.LayerNorm(hidden)
 
-        # Head: [transition, delta] = 2 × 1536 = 3072 → 512 → num_classes
         self.head = nn.Sequential(
             nn.Dropout(dropout),
-            nn.Linear(2 * hidden, 512),
+            nn.Linear(2 * hidden, head_hidden),
             nn.GELU(),
             nn.Dropout(dropout * 0.5),
-            nn.Linear(512, num_classes),
+            nn.Linear(head_hidden, num_classes),
         )
         nn.init.trunc_normal_(self.head[-1].weight, std=0.01)
         nn.init.zeros_(self.head[-1].bias)

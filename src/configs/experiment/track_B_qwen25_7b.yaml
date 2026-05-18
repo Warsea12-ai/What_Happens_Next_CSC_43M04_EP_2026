@@ -1,0 +1,39 @@
+# @package _global_
+# Track B — Qwen2.5-VL-7B visual encoder (frozen) + motion-aware head.
+#
+# Different from Qwen2-VL-7B (3584-dim):
+#   Qwen2.5-VL uses a redesigned vision encoder with improved training:
+#   hidden=1280-dim but trained on significantly more data with better recipes.
+#   Quality > quantity of dimensions for action understanding.
+#
+# Head: [global, first, last, delta] (4×1280=5120) → Linear(5120, 768) → GELU → Linear(768, 33)
+defaults:
+  - override /model: qwen25_7b
+
+model:
+  dropout: 0.4
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  backbone_lr_scale: 0.0
+  batch_size: 16            # 1280-dim encoder is lighter than 3584-dim
+  grad_accum_steps: 4       # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  temporal_jitter: 1

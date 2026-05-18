@@ -81,13 +81,17 @@ class QwenVLVideo(nn.Module):
         head_hidden: int = 512,
     ) -> None:
         super().__init__()
-        from transformers import Qwen2VLForConditionalGeneration
-
         print(f"Loading {backbone} to CPU…")
-        _full = Qwen2VLForConditionalGeneration.from_pretrained(
-            backbone,
-            dtype=torch.bfloat16,
-        )
+        if "2.5" in backbone:
+            from transformers import Qwen2_5_VLForConditionalGeneration
+            _full = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                backbone, dtype=torch.bfloat16,
+            )
+        else:
+            from transformers import Qwen2VLForConditionalGeneration
+            _full = Qwen2VLForConditionalGeneration.from_pretrained(
+                backbone, dtype=torch.bfloat16,
+            )
         self.visual = _full.model.visual
         del _full
         gc.collect()
@@ -97,10 +101,26 @@ class QwenVLVideo(nn.Module):
             p.requires_grad = False
 
         vcfg = self.visual.config
-        self.patch_size          = vcfg.patch_size           # 14
-        self.temporal_patch_size = vcfg.temporal_patch_size  # 2
-        self.spatial_merge_size  = vcfg.spatial_merge_size   # 2
-        hidden = vcfg.hidden_size                            # 1536 (2B) or 3584 (7B)
+        self.patch_size          = vcfg.patch_size                           # 14
+        self.temporal_patch_size = vcfg.temporal_patch_size                  # 2
+        self.spatial_merge_size  = getattr(vcfg, "spatial_merge_size", 2)   # 2
+
+        # Probe actual output dim — config.hidden_size may be the LLM dim, not the
+        # visual encoder output dim (e.g. 7B outputs 5120 pre-merger, not 3584).
+        ps, tps = vcfg.patch_size, vcfg.temporal_patch_size
+        _H, _W  = 224, 224
+        _T      = 4
+        _tg     = _T // tps
+        _hp     = _H // ps
+        _wp     = _W // ps
+        _dummy_pv = torch.zeros(
+            _tg * _hp * _wp, 3 * tps * ps * ps, dtype=torch.bfloat16,
+        )
+        _dummy_grid = torch.tensor([[_tg, _hp, _wp]], dtype=torch.long)
+        with torch.no_grad():
+            _out = self.visual(_dummy_pv, grid_thw=_dummy_grid)
+            _raw = _out.last_hidden_state if hasattr(_out, "last_hidden_state") else _out
+        hidden = int(_raw.shape[-1])
 
         self.norm_global = nn.LayerNorm(hidden)
         self.norm_first  = nn.LayerNorm(hidden)

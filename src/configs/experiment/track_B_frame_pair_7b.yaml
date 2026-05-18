@@ -1,0 +1,45 @@
+# @package _global_
+# Track B — FramePairNet with Qwen2-VL-7B encoder (3584-dim cross-attention).
+#
+# Upgrade from frame_pair (2B, 1536-dim) to 7B (3584-dim):
+#   - 2.3× wider spatial tokens → richer patch-level state representation
+#   - Cross-attention: 64 before-patches × 64 after-patches, each 3584-dim
+#   - n_heads=16 (head_dim = 3584/16 = 224)
+#   - head: 2×3584=7168 → Linear(7168, 1024) → GELU → Linear(1024, 33)
+#
+# Memory: 2 × 7B encoder forward passes (frozen) + cross-attention backprop
+#   batch=4, grad_accum=16 → effective batch = 64
+defaults:
+  - override /model: frame_pair_net
+
+model:
+  backbone: Qwen/Qwen2-VL-7B-Instruct
+  n_cross_layers: 2
+  n_heads: 16
+  dropout: 0.3
+  head_hidden: 1024
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  backbone_lr_scale: 0.0
+  batch_size: 4
+  grad_accum_steps: 16    # effective batch = 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  temporal_jitter: 1
