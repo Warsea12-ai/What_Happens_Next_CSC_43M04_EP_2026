@@ -2,8 +2,7 @@
 # Track B — FrozenVideoMAELarge v2: SSv2 backbone + richer temporal head.
 #
 # Improvements over track_B_frozen_large:
-#   1. SSv2 backbone instead of Kinetics — same domain as our challenge
-#   2. Mid temporal token added: head sees [global, first, mid, last, delta]
+#   1. Mid temporal token added: head sees [global, first, mid, last, delta]
 #      = 5×1024=5120 instead of 4×1024=4096
 #   3. Larger head: 5120 → 1024 → 33 (was 4096 → 512 → 33)
 #   4. Last 4 of 24 blocks unfrozen with backbone_lr_scale=0.01 (very gentle)
@@ -12,7 +11,7 @@ defaults:
   - override /model: frozen_videomae
 
 model:
-  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
   dropout: 0.4
   num_unfrozen_blocks: 4
   head_hidden: 1024
