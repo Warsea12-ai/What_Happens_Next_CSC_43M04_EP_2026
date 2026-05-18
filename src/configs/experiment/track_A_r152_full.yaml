@@ -1,0 +1,49 @@
+# @package _global_
+# Track A — TSM_s R152, full training recipe.
+#
+# Current best (40.4%) used: no augmentation, no mixup, batch_size=8, lr=1e-4.
+# This adds everything: frame_diff, motion pooling, augmentation, mixup+cutmix,
+# cosine LR with warmup, random resized crop, temporal reverse equivariance.
+#
+# Run from src/:
+#   uv run python train.py experiment=track_A_r152_full
+defaults:
+  - override /model: TSM_s
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion        # [global, first, last, delta] — best for SSv2 direction
+  use_frame_diff: true         # 6-channel input: explicit motion signal
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35       # higher for deep R152 (linear from 0→0.35 across blocks)
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 16               # R152 is memory-heavy; reduce if OOM
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

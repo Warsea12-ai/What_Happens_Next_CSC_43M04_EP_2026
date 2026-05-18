@@ -1,0 +1,48 @@
+# @package _global_
+# Track A — TSM_s R50, full training recipe.
+#
+# Faster to train than R152, good ensemble diversity partner.
+# Identical recipe to track_A_r152_full but adapted for R50 capacity.
+#
+# Run from src/:
+#   uv run python train.py experiment=track_A_r50_full
+defaults:
+  - override /model: TSM_s
+
+model:
+  pretrained: false
+  n_resnet_layers: 50
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.25
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0
