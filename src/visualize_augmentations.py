@@ -23,7 +23,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torchvision.transforms as T
 from PIL import Image
 
 from dataset.video_dataset import _list_frame_paths, _pick_frame_indices, collect_video_samples
@@ -34,47 +33,33 @@ from train import (
     label_aware_temporal_reverse,
     mixup_batch,
 )
-
-
-@torch.no_grad()
-def cutmix_batch(
-    clips: torch.Tensor, labels: torch.Tensor,
-    alpha: float = 0.4, num_classes: int = 33,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    lam = float(torch.distributions.Beta(alpha, alpha).sample())
-    B, T, C, H, W = clips.shape
-    idx = torch.randperm(B, device=clips.device)
-    cut_h = int(H * (1 - lam) ** 0.5)
-    cut_w = int(W * (1 - lam) ** 0.5)
-    cy, cx = int(torch.randint(H, (1,))), int(torch.randint(W, (1,)))
-    y1, y2 = max(0, cy - cut_h // 2), min(H, cy + cut_h // 2)
-    x1, x2 = max(0, cx - cut_w // 2), min(W, cx + cut_w // 2)
-    mixed = clips.clone()
-    mixed[:, :, :, y1:y2, x1:x2] = clips[idx, :, :, y1:y2, x1:x2]
-    lam = 1.0 - (y2 - y1) * (x2 - x1) / (H * W)
-    y = torch.zeros(B, num_classes, device=clips.device)
-    y.scatter_(1, labels.unsqueeze(1), 1.0)
-    return mixed, lam * y + (1 - lam) * y[idx]
+from utils import build_transforms
 
 NUM_FRAMES = 4
+USE_IMAGENET_NORM = False  # matches Track A (pretrained=false)
 
-# Display transforms: spatial augmentations only, NO normalization.
-# Augmentation functions (color_jitter_video, etc.) expect [0, 1] tensors,
-# so we never apply ImageNet normalization during visualization.
-_DISPLAY_TRAIN_TRANSFORM = T.Compose([
-    T.RandomResizedCrop(224, scale=(0.5, 1.0)),
-    T.RandomHorizontalFlip(),
-    T.ToTensor(),
-])
+_train_transform = build_transforms(is_training=True,  use_imagenet_norm=USE_IMAGENET_NORM,
+                                    use_random_resized_crop=True)
+_eval_transform  = build_transforms(is_training=False, use_imagenet_norm=USE_IMAGENET_NORM)
 
-_DISPLAY_EVAL_TRANSFORM = T.Compose([
-    T.Resize((224, 224)),
-    T.ToTensor(),
-])
+# Denorm constants matching build_transforms normalization
+if USE_IMAGENET_NORM:
+    _MEAN = torch.tensor([0.485, 0.456, 0.406])
+    _STD  = torch.tensor([0.229, 0.224, 0.225])
+else:
+    _MEAN = torch.tensor([0.5, 0.5, 0.5])
+    _STD  = torch.tensor([0.5, 0.5, 0.5])
+
+
+def denorm(x: torch.Tensor) -> torch.Tensor:
+    """Undo build_transforms normalization. x: (..., C, H, W) -> [..., C, H, W] in [0, 1]."""
+    m = _MEAN.view(*([1] * (x.dim() - 3)), 3, 1, 1)
+    s = _STD.view(*([1] * (x.dim() - 3)), 3, 1, 1)
+    return (x * s + m).clamp(0, 1)
 
 
 def to_uint8(tensor: torch.Tensor) -> np.ndarray:
-    """(C, H, W) float [0,1] tensor -> (H, W, 3) uint8 numpy array."""
+    """(C, H, W) float [0, 1] tensor -> (H, W, 3) uint8 numpy array."""
     return (tensor.float().clamp(0, 1).permute(1, 2, 0).numpy() * 255).astype(np.uint8)
 
 
@@ -88,13 +73,13 @@ def load_raw_frames(video_dir: Path, num_frames: int = NUM_FRAMES) -> List[Image
     return frames
 
 
-def frames_to_tensor(frames: List[Image.Image], transform: T.Compose) -> torch.Tensor:
-    """Returns (T, C, H, W)."""
+def frames_to_tensor(frames: List[Image.Image], transform) -> torch.Tensor:
+    """Returns (T, C, H, W) normalized tensor."""
     return torch.stack([transform(f) for f in frames])
 
 
 def video_to_grid(video: torch.Tensor) -> List[np.ndarray]:
-    """(T, C, H, W) [0,1] tensor -> list of T uint8 HWC arrays."""
+    """(T, C, H, W) [0, 1] tensor -> list of T uint8 HWC arrays."""
     return [to_uint8(video[t]) for t in range(video.shape[0])]
 
 
@@ -145,30 +130,31 @@ def visualize_one_video(
 ) -> None:
     raw_frames = load_raw_frames(video_dir)
 
-    # [0,1] tensors throughout — no normalization
-    original    = frames_to_tensor(raw_frames, _DISPLAY_EVAL_TRANSFORM)   # (T,C,H,W)
-    transformed = frames_to_tensor(raw_frames, _DISPLAY_TRAIN_TRANSFORM)  # (T,C,H,W)
-    batch = transformed.unsqueeze(0)  # (1,T,C,H,W)
+    original    = frames_to_tensor(raw_frames, _eval_transform)   # (T,C,H,W) normalized
+    transformed = frames_to_tensor(raw_frames, _train_transform)  # (T,C,H,W) normalized
+
+    # Denorm to [0,1] for augmentation functions
+    batch_01 = denorm(transformed.unsqueeze(0))  # (1,T,C,H,W)
 
     labels    = torch.tensor([0])
     forbidden = torch.tensor([], dtype=torch.long)
 
-    jittered = color_jitter_video(batch.clone(), p=1.0, strength=0.6)[0]
-    blurred  = gaussian_blur_video(batch.clone(), p=1.0, sigma_range=(0.5, 2.0))[0]
+    jittered = color_jitter_video(batch_01.clone(), p=1.0, strength=0.8)[0]
+    blurred  = gaussian_blur_video(batch_01.clone(), p=1.0, sigma_range=(1.0, 2.5))[0]
 
-    flipped, _ = label_aware_horizontal_flip(batch.clone(), labels, forbidden, p=1.0)
+    flipped, _ = label_aware_horizontal_flip(batch_01.clone(), labels, forbidden, p=1.0)
 
     reverse_lookup = torch.full((33,), -1, dtype=torch.long)
     reverse_lookup[0] = 0
-    reversed_, _ = label_aware_temporal_reverse(batch.clone(), labels, reverse_lookup, p=1.0)
+    reversed_, _ = label_aware_temporal_reverse(batch_01.clone(), labels, reverse_lookup, p=1.0)
 
     rows: List[Tuple[str, List[np.ndarray]]] = [
-        ("Original\n(resize only)",                    video_to_grid(original)),
-        ("Train transform\n(crop + h-flip)",            video_to_grid(transformed)),
-        ("Color jitter\n(brightness/contrast/\nsaturation, s=0.6)", video_to_grid(jittered)),
-        ("Gaussian blur\n(sigma in [0.5, 2.0])",        video_to_grid(blurred)),
-        ("Horizontal flip",                             video_to_grid(flipped[0])),
-        ("Temporal reverse\n(frame order reversed)",   video_to_grid(reversed_[0])),
+        ("Original\n(resize only)",                                video_to_grid(denorm(original))),
+        ("Train transform\n(crop + h-flip)",                       video_to_grid(denorm(transformed))),
+        ("Color jitter\n(brightness/contrast/\nsaturation, s=0.8)", video_to_grid(jittered)),
+        ("Gaussian blur\n(sigma in [1.0, 2.5])",                   video_to_grid(blurred)),
+        ("Horizontal flip",                                        video_to_grid(flipped[0])),
+        ("Temporal reverse\n(frame order reversed)",               video_to_grid(reversed_[0])),
     ]
 
     fig = build_figure(rows, "Per-video augmentation pipeline", class_name)
@@ -188,24 +174,39 @@ def visualize_batch_augments(
 
     for video_dir, label in chosen:
         raw = load_raw_frames(video_dir)
-        clips.append(frames_to_tensor(raw, _DISPLAY_TRAIN_TRANSFORM))
+        clips.append(frames_to_tensor(raw, _train_transform))
         labels_list.append(label)
         names.append(class_names[label] if label < len(class_names) else str(label))
 
-    batch  = torch.stack(clips)         # (B,T,C,H,W) in [0,1]
-    labels = torch.tensor(labels_list)  # (B,)
+    batch_norm = torch.stack(clips)          # (B,T,C,H,W) normalized
+    batch_01   = denorm(batch_norm)          # (B,T,C,H,W) in [0,1] for augmentation functions
 
-    augments = {
-        "Original":               batch.clone(),
-        "Color jitter\n(p=0.8)":  color_jitter_video(batch.clone(), p=0.8, strength=0.4),
-        "Gaussian blur\n(p=1.0)": gaussian_blur_video(batch.clone(), p=1.0, sigma_range=(0.3, 1.5)),
-        "MixUp\n(alpha=0.2)":     mixup_batch(batch.clone(), labels.clone(), alpha=0.2, num_classes=33)[0],
-        "CutMix\n(alpha=0.4)":    cutmix_batch(batch.clone(), labels.clone(), alpha=0.4, num_classes=33)[0],
+    # MixUp done locally so we can track the permutation and show both class names
+    B = len(chosen)
+    mixup_lam  = float(torch.distributions.Beta(0.5, 0.5).sample())
+    mixup_perm = torch.randperm(B).tolist()
+    mixup_batch_01 = mixup_lam * batch_01 + (1 - mixup_lam) * batch_01[mixup_perm]
+    # Label for each MixUp row: "A (λ) × B (1-λ)"
+    mixup_row_labels = [
+        f"MixUp (λ={mixup_lam:.2f})\n{names[i]}\n× {names[mixup_perm[i]]}"
+        for i in range(B)
+    ]
+
+    # Non-MixUp augments share the same per-video label format
+    simple_augments = {
+        "Original":               (batch_01.clone(),  [f"Original\n[{names[i]}]"         for i in range(B)]),
+        "Color jitter\n(p=0.8)":  (color_jitter_video(batch_01.clone(), p=0.8, strength=0.8),
+                                   [f"Color jitter\n[{names[i]}]"      for i in range(B)]),
+        "Gaussian blur\n(p=1.0)": (gaussian_blur_video(batch_01.clone(), p=1.0, sigma_range=(1.0, 2.5)),
+                                   [f"Gaussian blur\n[{names[i]}]"     for i in range(B)]),
     }
+    mixup_entry = (mixup_batch_01, mixup_row_labels)
 
-    n_aug       = len(augments)
+    all_groups = list(simple_augments.values()) + [mixup_entry]
+
+    n_aug       = len(all_groups)
     total_rows  = n_videos * n_aug
-    label_col_w = 2.2
+    label_col_w = 2.4
     frame_col_w = 2.2
     n_cols      = NUM_FRAMES + 1
 
@@ -219,14 +220,14 @@ def visualize_batch_augments(
         wspace=0.04,
     )
 
-    for aug_idx, (aug_name, aug_batch) in enumerate(augments.items()):
+    for aug_idx, (aug_batch, row_labels) in enumerate(all_groups):
         for vid_idx in range(n_videos):
             row_idx = aug_idx * n_videos + vid_idx
             frames  = video_to_grid(aug_batch[vid_idx])
 
             ax_label = fig.add_subplot(gs[row_idx, 0])
             ax_label.text(
-                0.95, 0.5, f"{aug_name}\n[{names[vid_idx]}]",
+                0.95, 0.5, row_labels[vid_idx],
                 ha="right", va="center",
                 fontsize=7,
                 fontweight="bold" if vid_idx == 0 else "normal",
