@@ -1,0 +1,38 @@
+# @package _global_
+# Track B — BidirectionalFramePairNet: symmetric before↔after cross-attention.
+#
+# Unlike the unidirectional FramePairNet (before→after only), this runs two
+# parallel cross-attention streams:
+#   forward:  before_patches attend to after_patches  ("what left the scene?")
+#   backward: after_patches  attend to before_patches ("what entered the scene?")
+# Both outputs are concatenated with the delta, giving the head a richer signal.
+#
+# Extra capacity cost: 2× the cross-attention params vs standard FramePairNet.
+# FFN expansion 2× (vs 1× in FramePairNet) for more expressiveness.
+defaults:
+  - override /model: bidirectional_frame_pair
+
+model:
+  backbone: "Qwen/Qwen2-VL-2B-Instruct"
+  n_cross_layers: 2
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 512
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  batch_size: 32
+  gradient_accumulation_steps: 2
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

@@ -1,0 +1,40 @@
+# @package _global_
+# Track B — QwenTemporalAttn: self-attention over all 128 Qwen tokens + CLS.
+#
+# Replaces mean-pooling in QwenVLVideo with a learned transformer:
+#   128 spatial tokens (2 temporal groups × 64) + [CLS] → 2 MHSA layers
+#   → CLS output (learned global aggregation) + delta → head
+#
+# Mean-pooling treats all patch tokens equally; learned attention weights
+# motion-relevant patches more heavily. The [CLS] token learns to "look at"
+# the most discriminative spatial regions across temporal groups.
+#
+# Model: Qwen2-VL-2B (1536-dim), n_attn_layers=2, head_hidden=512
+# Trainable: ~12M (CLS + pos_embed + 2×MHSA + head), Frozen: 665M
+defaults:
+  - override /model: qwen_temporal_attn
+
+model:
+  backbone: "Qwen/Qwen2-VL-2B-Instruct"
+  n_attn_layers: 2
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 512
+
+training:
+  epochs: 60
+  lr: 5.0e-4
+  batch_size: 32
+  gradient_accumulation_steps: 2
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

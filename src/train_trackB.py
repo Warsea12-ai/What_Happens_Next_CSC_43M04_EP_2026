@@ -37,6 +37,10 @@ from models.qwen_vl_video import QwenVLVideo
 from models.dynamic_videomae import DynamicVideoMAE
 from models.frame_pair_net import FramePairNet
 from models.dual_encoder import DualEncoder
+from models.bidirectional_frame_pair import BidirectionalFramePairNet
+from models.qwen_temporal_attn import QwenTemporalAttn
+from models.videomae_lora import VideoMAELoRA
+from models.qwen_lora import QwenVLLoRA
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -243,6 +247,42 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.4)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
+    if name == "bidirectional_frame_pair":
+        return BidirectionalFramePairNet(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
+            n_cross_layers=int(cfg.model.get("n_cross_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "qwen_temporal_attn":
+        return QwenTemporalAttn(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-2B-Instruct")),
+            n_attn_layers=int(cfg.model.get("n_attn_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "videomae_lora":
+        return VideoMAELoRA(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
+            lora_rank=int(cfg.model.get("lora_rank", 8)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 16.0)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "qwen_lora":
+        return QwenVLLoRA(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2-VL-7B-Instruct")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 768)),
+        )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
 
@@ -266,7 +306,11 @@ def build_optimizer(model: nn.Module, cfg: DictConfig) -> torch.optim.Optimizer:
     elif hasattr(model, "head_parameters"):
         # head_parameters() always present; backbone_parameters() may return [] (frozen model)
         backbone_params = model.backbone_parameters() if hasattr(model, "backbone_parameters") else []
+        lora_params = model.lora_parameters() if hasattr(model, "lora_parameters") else []
         param_groups = [{"params": model.head_parameters(), "lr": base_lr}]
+        if lora_params:
+            # LoRA adapters train at backbone_lr_scale (gentler than head, faster than 0)
+            param_groups.append({"params": lora_params, "lr": base_lr * backbone_scale})
         if backbone_params:
             param_groups.append({"params": backbone_params, "lr": base_lr * backbone_scale})
     else:

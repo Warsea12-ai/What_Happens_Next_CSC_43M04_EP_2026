@@ -1,0 +1,7 @@
+name: qwen_temporal_attn
+num_classes: 33
+backbone: "Qwen/Qwen2-VL-2B-Instruct"
+n_attn_layers: 2
+n_heads: 8
+dropout: 0.3
+head_hidden: 512

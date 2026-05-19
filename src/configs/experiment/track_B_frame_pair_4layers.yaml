@@ -1,0 +1,34 @@
+# @package _global_
+# Track B — FramePairNet with 4 cross-attention layers (vs default 2).
+#
+# More cross-attention capacity to capture complex spatial transitions.
+# The 2-layer version processes before→after in 2 passes; 4 layers gives
+# the model more depth to refine "what changed where" across spatial patches.
+# ~23M → ~46M trainable params; still trivial next to the 665M frozen encoder.
+defaults:
+  - override /model: frame_pair_net
+
+model:
+  backbone: "Qwen/Qwen2-VL-2B-Instruct"
+  n_cross_layers: 4
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 512
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  batch_size: 32
+  gradient_accumulation_steps: 2
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

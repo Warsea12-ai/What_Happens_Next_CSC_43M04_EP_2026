@@ -1,0 +1,37 @@
+# @package _global_
+# Track B — QwenTemporalAttn with Qwen2-VL-7B (3584-dim tokens).
+#
+# Same self-attention architecture as qwen_temporal_attn but on the 7B encoder's
+# richer 3584-dim tokens. The 7B encoder produces semantically stronger patch
+# representations, so the CLS self-attention has more informative inputs.
+#
+# Trade-off: larger head (4 × n_heads to match 3584-dim) and smaller batch.
+# n_heads=16: 3584/16 = 224 dims per head (standard for large VLMs).
+# head_hidden=1024 to avoid bottlenecking the 2×3584 input feature.
+defaults:
+  - override /model: qwen_temporal_attn
+
+model:
+  backbone: "Qwen/Qwen2-VL-7B-Instruct"
+  n_attn_layers: 2
+  n_heads: 16
+  dropout: 0.3
+  head_hidden: 1024
+
+training:
+  epochs: 50
+  lr: 3.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 8
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

@@ -1,0 +1,42 @@
+# @package _global_
+# Track B — QwenVLLoRA: Qwen2-VL-7B visual encoder with LoRA adapters.
+#
+# Qwen2-VL-7B has a 3584-dim visual encoder (the largest available).
+# The frozen version (qwen2_vl_7b) is strong but locked into general VLM features.
+# LoRA rank=16 inserts ~7M adapter params on q_proj + v_proj of 32 attention blocks.
+#
+# Key: unlike full fine-tuning (35B+grad memory), LoRA needs grad only for
+# the tiny A/B matrices — feasible at batch=8 with accum=8 (effective=64).
+#
+# lora_alpha=32, rank=16 → scale=2.0, modest updates: the encoder nudges
+# toward action-discriminative features without losing VLM pretraining.
+#
+# backbone_lr_scale=0.02: LoRA adapters at 2% of head LR.
+defaults:
+  - override /model: qwen_lora
+
+model:
+  backbone: "Qwen/Qwen2-VL-7B-Instruct"
+  lora_rank: 16
+  lora_alpha: 32.0
+  dropout: 0.3
+  head_hidden: 768
+
+training:
+  epochs: 50
+  lr: 3.0e-4
+  backbone_lr_scale: 0.02
+  batch_size: 8
+  gradient_accumulation_steps: 8
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

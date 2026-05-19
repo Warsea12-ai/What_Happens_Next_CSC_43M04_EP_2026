@@ -1,29 +1,21 @@
 # @package _global_
-# Track B — VideoMAE-Large (Kinetics), last 6/24 blocks unfrozen.
-#
-# Middle ground between fully frozen (fast, lower ceiling) and full fine-tune
-# (slow, overfitting risk). Unfreezing the last 6 blocks gives the model room
-# to specialise its high-level features for our 33 classes while keeping the
-# first 18 blocks as a stable feature extractor.
-#
-# LR hierarchy:
-#   head           : lr = 5e-4
-#   last 6 blocks  : lr × backbone_lr_scale = 5e-5  (very gentle)
-#   first 18 blocks: frozen
+# Track B — VideoMAE-Large Kinetics, last 6/24 blocks fine-tuned.
+# Midpoint between fully frozen (fast, weaker) and full fine-tune (slow, OOM risk).
+# Very low backbone LR protects Kinetics features while adapting top blocks.
 defaults:
   - override /model: frozen_videomae
 
 model:
+  num_unfrozen_blocks: 6   # unfreeze last 6 of 24 blocks
   dropout: 0.4
-  num_unfrozen_blocks: 6
-  head_hidden: 512
+  head_hidden: 1024        # wider head for partially fine-tuned 1024-dim features
 
 training:
-  epochs: 60
-  lr: 5.0e-4
-  backbone_lr_scale: 0.1   # unfrozen blocks get 5e-5
-  batch_size: 16            # smaller than fully-frozen (need backprop through 6 blocks)
-  grad_accum_steps: 4       # effective batch = 64
+  epochs: 50
+  lr: 3.0e-4               # head LR
+  backbone_lr_scale: 0.02  # unfrozen blocks get 6e-6 — very gentle
+  batch_size: 8            # activation memory for 6 backprop blocks
+  grad_accum_steps: 8      # effective batch = 64
   weight_decay: 1.0e-3
   label_smoothing: 0.15
   warmup_epochs: 8
@@ -31,14 +23,12 @@ training:
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
-
   use_augment: true
   color_prob: 0.8
-  color_strength: 0.3
-  blur_prob: 0.1
+  color_strength: 0.4
+  blur_prob: 0.15
 
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
-
   temporal_jitter: 1

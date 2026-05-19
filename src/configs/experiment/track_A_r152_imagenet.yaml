@@ -1,37 +1,40 @@
 # @package _global_
-# Track A — TSM-R152 + motion head + 8-frame sampling + full augmentation.
-# The previous best (0.4036) used 8 frames with minimal augmentation.
-# This adds: motion head, frame_diff, CutMix/MixUp, RRC, equivariant reverse.
-# Hypothesis: 8 frames × new recipe > old 8-frame recipe (0.4036).
+# Track A — R152 + ImageNet pretrained + motion head + 8 frames.
+#
+# Key difference from track_A_r152_8frames: pretrained=true loads ImageNet
+# weights into the ResNet backbone. This is the single biggest missed gain
+# in all previous experiments (all trained from random initialization).
+# Expected improvement: 3-6% over the from-scratch 0.4036 baseline.
 defaults:
   - override /model: TSM_s
 
 dataset:
-  num_frames: 8            # 8-frame sampling (same as old best)
+  num_frames: 8
 
 model:
-  pretrained: false
+  pretrained: true
   n_resnet_layers: 152
   fold_div: 8
-  dropout: 0.5
+  dropout: 0.4
   temporal_pool: motion
   use_frame_diff: true
   use_positional_encoding: true
   pe_mode: sinusoidal
-  stochastic_depth: 0.35
+  stochastic_depth: 0.25
   head_hidden: false
 
 training:
-  epochs: 120
-  lr: 5.0e-4
+  epochs: 80
+  lr: 1.0e-4
   batch_size: 16
   weight_decay: 5.0e-4
-  label_smoothing: 0.15
-  warmup_epochs: 8
+  label_smoothing: 0.1
+  warmup_epochs: 5
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
+
   use_augment: true
   color_prob: 0.5
   color_strength: 0.15
@@ -42,6 +45,6 @@ training:
   equivariant_reverse_prob: 0.5
 
   use_mixup: true
-  mixup_alpha: 0.8
+  mixup_alpha: 0.4
   use_cutmix: true
-  cutmix_alpha: 1.0
+  cutmix_alpha: 0.5

@@ -1,0 +1,44 @@
+# @package _global_
+# Track B — VideoMAELoRA: VideoMAE-Large with LoRA adapters on all attention blocks.
+#
+# Problem with FrozenVideoMAELarge: the 307M encoder is forever stuck in its
+# Kinetics-pretraining regime. Problem with unfreezing 6 blocks: expensive,
+# high risk of forgetting. LoRA is the sweet spot:
+#
+#   - rank=8, alpha=16 → ~3M adapter params across 24 blocks
+#   - Every block adapts, from bottom (general) to top (task-specific)
+#   - Non-adapter weights stay frozen (no catastrophic forgetting of Kinetics)
+#   - batch_size=32 feasible (LoRA needs grad but only tiny A/B matrices)
+#
+# Expected improvement over frozen baseline: adapted features align better
+# with first-person action domain → +2-4% accuracy.
+#
+# backbone_lr_scale=0.02: LoRA adapters trained at 2% of head LR (very gentle)
+defaults:
+  - override /model: videomae_lora
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+  lora_rank: 8
+  lora_alpha: 16.0
+  dropout: 0.4
+  head_hidden: 512
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 16
+  gradient_accumulation_steps: 4
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+  use_cutmix: false

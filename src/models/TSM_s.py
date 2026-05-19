@@ -249,6 +249,7 @@ class TSM_s(nn.Module):
         pe_mode: str = "learned",
         stochastic_depth: float = 0.1,
         head_hidden: bool = False,
+        pretrained: bool = False,
         pretrained_backbone_path: Optional[str] = None,
     ):
         super().__init__()
@@ -264,13 +265,28 @@ class TSM_s(nn.Module):
 
         if n_resnet_layers not in backbone_factory:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
-            
-        backbone = backbone_factory[n_resnet_layers](weights=None)
+
+        if pretrained and pretrained_backbone_path is None:
+            from torchvision.models import (
+                ResNet18_Weights, ResNet34_Weights, ResNet50_Weights,
+                ResNet101_Weights, ResNet152_Weights,
+            )
+            _weights = {
+                18: ResNet18_Weights.IMAGENET1K_V1,
+                34: ResNet34_Weights.IMAGENET1K_V1,
+                50: ResNet50_Weights.IMAGENET1K_V2,
+                101: ResNet101_Weights.IMAGENET1K_V2,
+                152: ResNet152_Weights.IMAGENET1K_V2,
+            }[n_resnet_layers]
+            backbone = backbone_factory[n_resnet_layers](weights=_weights)
+            print(f"TSM_s: loaded ImageNet pretrained R{n_resnet_layers} backbone.")
+        else:
+            backbone = backbone_factory[n_resnet_layers](weights=None)
 
         # ---- Conv1 modifiée si frame-diff ---------------------------------
         if use_frame_diff:
             old_conv = backbone.conv1
-            backbone.conv1 = nn.Conv2d(
+            new_conv = nn.Conv2d(
                 in_channels=6,
                 out_channels=old_conv.out_channels,
                 kernel_size=old_conv.kernel_size,           # type: ignore
@@ -278,6 +294,12 @@ class TSM_s(nn.Module):
                 padding=old_conv.padding,                   # type: ignore
                 bias=False,
             )
+            if pretrained:
+                # Transfer pretrained 3-ch weights; zero-init the frame-diff channels
+                with torch.no_grad():
+                    new_conv.weight[:, :3] = old_conv.weight.data
+                    new_conv.weight[:, 3:] = 0.0
+            backbone.conv1 = new_conv
 
         # ---- Insertion des temporal shifts + stochastic depth -------------
         make_temporal_shift(

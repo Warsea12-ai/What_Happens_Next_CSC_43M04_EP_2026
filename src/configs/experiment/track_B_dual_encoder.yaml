@@ -1,16 +1,7 @@
 # @package _global_
 # Track B — DualEncoder: VideoMAE-Large (Kinetics) + Qwen2-VL-7B, both frozen.
-#
-# The two encoders are pretrained with orthogonal objectives:
-#   VideoMAE: spatio-temporal masked autoencoding → motion and dynamics
-#   Qwen2-VL: vision-language alignment → rich semantics and object concepts
-#
-# Motion features concatenated (19 456-dim):
-#   VideoMAE:  [global, first, mid, last, delta] = 5 × 1024 = 5 120
-#   Qwen2-VL:  [global, first, last, delta]      = 4 × 3584 = 14 336
-#
-# Both frozen → head-only training with large effective batch.
-# Head: Linear(19456, 1024) → GELU → Linear(1024, 33)
+# Concatenated motion features: 5×1024 + 4×3584 = 5120 + 14336 = 19456-dim.
+# Two orthogonal pretraining signals: spatio-temporal (VideoMAE) + semantic (Qwen).
 defaults:
   - override /model: dual_encoder
 
@@ -22,8 +13,8 @@ training:
   epochs: 60
   lr: 3.0e-4
   backbone_lr_scale: 0.0
-  batch_size: 8             # two large encoders in memory simultaneously
-  grad_accum_steps: 8       # effective batch = 64
+  batch_size: 8            # two large frozen encoders in memory simultaneously
+  grad_accum_steps: 8      # effective batch = 64
   weight_decay: 1.0e-3
   label_smoothing: 0.15
   warmup_epochs: 5
@@ -31,7 +22,6 @@ training:
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
-
   use_augment: true
   color_prob: 0.8
   color_strength: 0.4
@@ -40,5 +30,4 @@ training:
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
-
   temporal_jitter: 1

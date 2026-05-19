@@ -1,0 +1,7 @@
+name: qwen_lora
+num_classes: 33
+backbone: "Qwen/Qwen2-VL-7B-Instruct"
+lora_rank: 16
+lora_alpha: 32.0
+dropout: 0.3
+head_hidden: 768

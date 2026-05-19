@@ -1,36 +1,29 @@
 # @package _global_
-# Track B — VideoMAE-Base SSv2, fully fine-tuned (zero frozen blocks).
-#
-# Why this can work: SSv2 pretraining is same-domain as our challenge.
-# All 12 blocks learn task-specific features without catastrophic forgetting risk.
-# Differential LR: head >> later blocks >> early blocks via LLRD.
-#
-# Key difference vs track_B_videomae: num_frozen_blocks=0 (vs 6 default).
-# This lets ALL transformer blocks adapt to our 33-class distribution.
+# Track B — VideoMAE-Base SSv2, fully fine-tuned (no frozen blocks).
+# Same-domain pretraining (SSv2 ≈ our challenge) → full fine-tune is safe.
+# All 12 blocks trainable with low LLRD to protect early layers.
 defaults:
   - override /model: videomae
 
 model:
-  backbone: MCG-NJU/videomae-base-finetuned-ssv2
-  num_frozen_blocks: 0    # all 12 blocks trainable
+  num_frozen_blocks: 0     # unfreeze everything
   dropout: 0.3
   frames_repeat: 4
 
 training:
   epochs: 50
-  lr: 3.0e-4             # head LR
-  backbone_lr_scale: 0.1  # top block gets 3e-5
-  llrd_factor: 0.75       # block 0 gets ~3e-5 × 0.75^11 ≈ 1.6e-6
+  lr: 2.0e-4               # head LR
+  backbone_lr_scale: 0.1   # backbone blocks: 2e-5 base
+  llrd_factor: 0.75        # geometric decay per block toward input
   batch_size: 8
-  grad_accum_steps: 4    # effective batch = 32
+  grad_accum_steps: 4      # effective batch = 32
   weight_decay: 5.0e-4
   label_smoothing: 0.1
-  warmup_epochs: 8       # longer warmup — all blocks are being updated
+  warmup_epochs: 8
   min_lr: 1.0e-7
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
-
   use_augment: true
   color_prob: 0.8
   color_strength: 0.3
@@ -39,5 +32,4 @@ training:
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
-
   temporal_jitter: 1

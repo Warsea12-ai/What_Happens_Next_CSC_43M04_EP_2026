@@ -312,6 +312,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             pe_mode=str(cfg.model.get("pe_mode", "sinusoidal")),
             stochastic_depth=float(cfg.model.get("stochastic_depth", 0.1)),
             head_hidden=bool(cfg.model.get("head_hidden", False)),
+            pretrained=bool(cfg.model.get("pretrained", False)),
             pretrained_backbone_path=cfg.model.get("pretrained_backbone_path", None),
         )
 

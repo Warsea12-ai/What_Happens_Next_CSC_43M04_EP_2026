@@ -1,0 +1,7 @@
+name: videomae_lora
+num_classes: 33
+backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+lora_rank: 8
+lora_alpha: 16.0
+dropout: 0.4
+head_hidden: 512
