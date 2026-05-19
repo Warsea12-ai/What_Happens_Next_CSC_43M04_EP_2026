@@ -222,6 +222,34 @@ class TemporalPositionalEncoding(nn.Module):
 
 
 # =============================================================================
+# Temporal Transformer block (for temporal_pool="transformer")
+# =============================================================================
+class _TemporalTransformerBlock(nn.Module):
+    """Pre-LN MHSA + FFN over the temporal sequence (B, T, D)."""
+
+    def __init__(self, d_model: int, n_heads: int = 8, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn  = nn.MultiheadAttention(d_model, n_heads, dropout=dropout,
+                                            batch_first=True)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, d_model * 4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 4, d_model),
+        )
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.norm1(x)
+        attn_out, _ = self.attn(h, h, h)
+        x = x + self.drop(attn_out)
+        x = x + self.drop(self.ff(self.norm2(x)))
+        return x
+
+
+# =============================================================================
 # Modèle principal
 # =============================================================================
 class TSM_s(nn.Module):
@@ -251,12 +279,14 @@ class TSM_s(nn.Module):
         head_hidden: bool = False,
         pretrained: bool = False,
         pretrained_backbone_path: Optional[str] = None,
+        use_multiscale: bool = False,
     ):
         super().__init__()
         self.n_segment = n_segment
         self.use_frame_diff = use_frame_diff
         self.use_positional_encoding = use_positional_encoding
         self.temporal_pool = temporal_pool
+        self.use_multiscale = use_multiscale
 
         backbone_factory = {
             18: resnet18, 34: resnet34, 50: resnet50,
@@ -313,6 +343,13 @@ class TSM_s(nn.Module):
         backbone.fc = nn.Identity()  # type: ignore
         self.backbone = backbone
 
+        # Multi-scale: fuse features from layer2 + layer3 + layer4.
+        # Override in_features to the concatenated dimension.
+        if use_multiscale:
+            _bottleneck = {50, 101, 152}
+            _stage_dims = [512, 1024, 2048] if n_resnet_layers in _bottleneck else [128, 256, 512]
+            in_features = sum(_stage_dims)
+
         # ---- Load SSL-pretrained backbone (optional) -----------------------
         if pretrained_backbone_path is not None:
             import os, torch as _torch
@@ -344,6 +381,17 @@ class TSM_s(nn.Module):
         # ---- Pooling temporel ---------------------------------------------
         if temporal_pool == "attention":
             self.attn = nn.Linear(in_features, 1)
+        elif temporal_pool == "transformer":
+            # n_heads: largest power of 2 that divides in_features and ≤ 16
+            _nh = 1
+            for _h in [2, 4, 8, 16]:
+                if in_features % _h == 0:
+                    _nh = _h
+            self.temporal_transformer = nn.ModuleList([
+                _TemporalTransformerBlock(in_features, n_heads=_nh, dropout=dropout)
+                for _ in range(2)
+            ])
+            self.temporal_transformer_norm = nn.LayerNorm(in_features)
 
         # ---- Tête de classification ---------------------------------------
         if temporal_pool == "motion":
@@ -402,7 +450,22 @@ class TSM_s(nn.Module):
 
         # ---- Backbone -----------------------------------------------------
         x = clips.reshape(B * T, C, H, W)
-        feats = self.backbone(x).view(B, T, -1)            # (B, T, D)
+        if self.use_multiscale:
+            # Extract and fuse features from three stages independently.
+            x = self.backbone.conv1(x)
+            x = self.backbone.bn1(x)
+            x = self.backbone.relu(x)
+            x = self.backbone.maxpool(x)
+            x = self.backbone.layer1(x)
+            x = self.backbone.layer2(x)
+            f2 = self.backbone.avgpool(x).flatten(1)       # (B*T, D2)
+            x = self.backbone.layer3(x)
+            f3 = self.backbone.avgpool(x).flatten(1)       # (B*T, D3)
+            x = self.backbone.layer4(x)
+            f4 = self.backbone.avgpool(x).flatten(1)       # (B*T, D4)
+            feats = torch.cat([f2, f3, f4], dim=1).view(B, T, -1)  # (B, T, D2+D3+D4)
+        else:
+            feats = self.backbone(x).view(B, T, -1)        # (B, T, D)
 
         # ---- PE temporel --------------------------------------------------
         if self.use_positional_encoding:
@@ -427,6 +490,13 @@ class TSM_s(nn.Module):
                 self.norm_last(last),
                 self.norm_delta(delta),
             ], dim=1)                                      # (B, 4*D)
+        elif self.temporal_pool == "transformer":
+            # 2-layer self-attention over T temporal feature vectors.
+            # Each time step attends to all others, learning what temporal
+            # positions matter for each class before mean-pooling.
+            for layer in self.temporal_transformer:
+                feats = layer(feats)                       # (B, T, D)
+            feats = self.temporal_transformer_norm(feats).mean(dim=1)  # (B, D)
         else:
             raise ValueError(f"Unknown temporal_pool: {self.temporal_pool}")
 

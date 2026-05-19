@@ -1,10 +1,10 @@
 # @package _global_
-# Track A — R152 + ImageNet pretrained + motion head + 8 frames.
+# Track A — R34 + ImageNet pretrained + motion head + 8 frames.
 #
-# Key difference from track_A_r152_8frames: pretrained=true loads ImageNet
-# weights into the ResNet backbone. This is the single biggest missed gain
-# in all previous experiments (all trained from random initialization).
-# Expected improvement: 3-6% over the from-scratch 0.4036 baseline.
+# R34 uses BasicBlocks (like R18) but with 3 stages of 4 blocks vs R18's 2.
+# Deeper than R18 (34 vs 18 layers) but same output dim (512-D).
+# Fills the gap in our backbone sweep: R18(0.3766) → R34 → R50 → R152(0.4036).
+# All from scratch. With ImageNet init this should push significantly above R18.
 defaults:
   - override /model: TSM_s
 
@@ -13,37 +13,34 @@ dataset:
 
 model:
   pretrained: false
-  n_resnet_layers: 152
+  n_resnet_layers: 34
   fold_div: 8
-  dropout: 0.4
+  dropout: 0.35
   temporal_pool: motion
   use_frame_diff: true
   use_positional_encoding: true
   pe_mode: sinusoidal
-  stochastic_depth: 0.25
+  stochastic_depth: 0.12
   head_hidden: false
 
 training:
   epochs: 80
-  lr: 1.0e-4
-  batch_size: 16
-  weight_decay: 5.0e-4
+  lr: 2.0e-4
+  batch_size: 64
+  weight_decay: 2.0e-4
   label_smoothing: 0.1
   warmup_epochs: 5
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
-
   use_augment: true
   color_prob: 0.5
   color_strength: 0.15
   blur_prob: 0.0
-
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
-
   use_mixup: true
   mixup_alpha: 0.4
   use_cutmix: true

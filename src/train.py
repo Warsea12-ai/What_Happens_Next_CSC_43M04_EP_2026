@@ -314,6 +314,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=bool(cfg.model.get("head_hidden", False)),
             pretrained=bool(cfg.model.get("pretrained", False)),
             pretrained_backbone_path=cfg.model.get("pretrained_backbone_path", None),
+            use_multiscale=bool(cfg.model.get("use_multiscale", False)),
         )
 
     if name == "TSM_RES":

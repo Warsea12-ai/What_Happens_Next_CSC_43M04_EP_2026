@@ -11,7 +11,7 @@ dataset:
   num_frames: 8
 
 model:
-  pretrained: true
+  pretrained: false
   n_resnet_layers: 18
   fold_div: 8
   dropout: 0.3
