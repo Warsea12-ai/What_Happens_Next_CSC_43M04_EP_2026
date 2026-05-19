@@ -1,0 +1,35 @@
+# @package _global_
+# FramePairNet with Qwen2-VL-7B encoder + equivariance.
+# The 7B model has richer visual tokens than 2B (1536→3584-D per patch).
+# Cross-attention transitions are more expressive with larger token features.
+# Frozen backbone (backbone_lr_scale=0.0) keeps the 7B parameters stable.
+defaults:
+  - override /model: frame_pair_net
+
+model:
+  backbone: "Qwen/Qwen2-VL-7B-Instruct"
+  n_cross_layers: 2
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

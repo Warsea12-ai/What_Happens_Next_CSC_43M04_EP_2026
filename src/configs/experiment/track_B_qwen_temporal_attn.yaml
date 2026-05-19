@@ -25,7 +25,7 @@ training:
   epochs: 60
   lr: 5.0e-4
   batch_size: 32
-  gradient_accumulation_steps: 2
+  grad_accum_steps: 2
   weight_decay: 1.0e-4
   label_smoothing: 0.1
   warmup_epochs: 5
@@ -38,3 +38,6 @@ training:
   flip_prob: 0.5
   use_mixup: false
   use_cutmix: false
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

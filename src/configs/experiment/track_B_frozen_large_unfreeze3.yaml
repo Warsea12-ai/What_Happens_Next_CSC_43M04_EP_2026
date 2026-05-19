@@ -1,0 +1,33 @@
+# @package _global_
+# VideoMAE-Large, last 3/24 blocks fine-tuned — conservative midpoint.
+# unfreeze6 may cause forgetting; fully frozen misses domain adaptation.
+# 3 unfrozen blocks = lightest partial fine-tune: adapts task-specific features
+# in the last 3 blocks while preserving everything below.
+defaults:
+  - override /model: frozen_videomae
+
+model:
+  num_unfrozen_blocks: 3
+  dropout: 0.4
+  head_hidden: 1024
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  backbone_lr_scale: 0.01
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

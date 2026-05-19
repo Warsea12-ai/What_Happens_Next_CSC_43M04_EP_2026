@@ -1,0 +1,39 @@
+# @package _global_
+# FramePairNet Qwen2-VL-2B, 100 epochs — longer training for cross-attn convergence.
+# Cross-attention with a frozen encoder benefits from more gradient updates
+# than FramePairNet's default 80 epochs, since the head starts from random init
+# and must learn the "what changed" signal purely from the cross-attn residuals.
+defaults:
+  - override /model: frame_pair_net
+
+model:
+  backbone: "Qwen/Qwen2-VL-2B-Instruct"
+  n_cross_layers: 2
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 512
+
+training:
+  epochs: 100
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  batch_size: 32
+  grad_accum_steps: 2
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.4
+  use_cutmix: true
+  cutmix_alpha: 0.6

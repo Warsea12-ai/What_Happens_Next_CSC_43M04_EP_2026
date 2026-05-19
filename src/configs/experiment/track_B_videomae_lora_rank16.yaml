@@ -1,0 +1,35 @@
+# @package _global_
+# VideoMAELoRA rank=16 — more adaptation capacity than rank=8.
+# rank=16, alpha=32 → ~6M adapter params, still well below full fine-tune.
+# Higher rank lets the model adapt larger subspaces of the attention heads,
+# useful when the domain gap (Kinetics→first-person actions) is large.
+defaults:
+  - override /model: videomae_lora
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+  lora_rank: 16
+  lora_alpha: 32.0
+  dropout: 0.4
+  head_hidden: 1024
+
+training:
+  epochs: 60
+  lr: 3.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.2
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

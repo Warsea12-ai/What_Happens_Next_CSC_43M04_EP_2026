@@ -1,0 +1,35 @@
+# @package _global_
+# QwenVLLoRA rank=8 — lighter adaptation than the default rank=16.
+# Smaller rank → less risk of forgetting, faster training.
+# Qwen2-VL-7B has very rich visual features; rank=8 may be enough
+# to adapt the distribution shift to first-person action recognition.
+defaults:
+  - override /model: qwen_lora
+
+model:
+  backbone: "Qwen/Qwen2-VL-7B-Instruct"
+  lora_rank: 8
+  lora_alpha: 16.0
+  dropout: 0.3
+  head_hidden: 768
+
+training:
+  epochs: 40
+  lr: 3.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.2
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
