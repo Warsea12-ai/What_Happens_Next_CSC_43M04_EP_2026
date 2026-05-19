@@ -1,0 +1,41 @@
+# @package _global_
+# MotionPyramidNet + temporal equivariance.
+# The pyramid captures fine/medium/coarse motion scales.
+# Reversed-video augmentation pairs naturally with the coarse scale:
+# a pick_up played backwards IS a put_down at every temporal scale.
+defaults:
+  - override /model: motion_pyramid_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  n_scale_layers: 2
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 24
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0
