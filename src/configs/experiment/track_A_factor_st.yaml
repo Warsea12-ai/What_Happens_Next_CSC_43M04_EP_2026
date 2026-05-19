@@ -1,0 +1,65 @@
+# @package _global_
+# Track A — FactorSTNet: Shared CNN + Divided Space-Time Transformer.
+#
+# Complementary to StateCompareNet: where StateCompareNet compares initial vs
+# final state, FactorSTNet models the full temporal trajectory of each patch.
+#
+# Two actions with the same start/end states but different paths:
+#   "picking up" vs "putting down" → same endpoint, opposite trajectory
+#   "opening" vs "closing"         → same endpoint, opposite arc
+# FactorSTNet can distinguish these; StateCompareNet cannot.
+#
+# Architecture:
+#   Shared R50 backbone (per-frame, no avgpool) → 49 tokens per frame
+#   4 frames × 49 patches = 196 tokens, each at 256-D (projected from 2048)
+#   + separate temporal PE (which of 4 frames) + spatial PE (which of 49 patches)
+#   4 × FactoredSTBlock:
+#     ① Temporal attn: (B×49, 4, 256) — each patch tracks its own 4-step trajectory
+#     ② Spatial attn:  (B×4, 49, 256) — patches exchange context per time step
+#   Global average pool (T, P) → LayerNorm → Linear(256, 512) → Linear(512, 33)
+#
+# Divided attention is the key inductive bias:
+#   temporal axis ≠ spatial axis — treating them separately is better than
+#   joint 196×196 attention, which would be expensive AND treat space/time equally
+#   even though they have fundamentally different structure.
+#
+# Params: ~30M (all trainable from scratch)
+# num_frames=4: uses the 4 genuine frames directly (no repetition — repetition
+# would waste positional encoding capacity and add redundant tokens)
+defaults:
+  - override /model: factor_st_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  proj_dim: 256
+  n_blocks: 4
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

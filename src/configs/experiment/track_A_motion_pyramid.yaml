@@ -1,0 +1,58 @@
+# @package _global_
+# Track A — MotionPyramidNet: Temporal Difference Pyramid + Scale-Selection Attention.
+#
+# Complementary to StateCompareNet and FactorSTNet:
+#   StateCompareNet: WHERE did things change? (spatial cross-attention before↔after)
+#   FactorSTNet:     WHEN did things change? (per-patch 4-step trajectory)
+#   MotionPyramidNet: AT WHAT TEMPORAL SCALE? (pyramid frequency selection)
+#
+# Architecture:
+#   4 frames → 8 temporal pyramid signals (3 fine + 2 medium + 1 coarse + 2 appearance)
+#   Shared R50 encoder (with avgpool) encodes all 8 in one batched pass
+#   Scale-type embeddings (4 classes: fine/medium/coarse/context) injected before attention
+#   2-layer self-attention over 8 scale tokens → mean-pool → classify
+#
+# The key idea: different action classes are identified at different temporal scales.
+#   pick_up/put_down: coarse global displacement
+#   stir/shake:       fine consecutive oscillations
+#   pour/fill:        medium directional flow
+#   open/close:       sign of global displacement
+#
+# Params: ~26M (all trainable from scratch)
+# num_frames=4: pyramid construction uses exactly 4 frames (f0..f3)
+defaults:
+  - override /model: motion_pyramid_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  n_scale_layers: 2
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

@@ -52,6 +52,9 @@ from models.X3D import X3D
 from utils import build_transforms, set_seed, split_train_val
 from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
+from models.state_compare_net import StateCompareNet
+from models.factor_st_net import FactorSTNet
+from models.motion_pyramid_net import MotionPyramidNet
 from torchvision.models.video import mvit_v1_b
 
 
@@ -364,6 +367,39 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.5)),
             use_frame_diff=bool(cfg.model.get("use_frame_diff", False)),
             drop_path_rate=float(cfg.model.get("stochastic_depth", 0.2)),
+        )
+
+    if name == "state_compare_net":
+        return StateCompareNet(
+            num_classes=num_classes,
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
+            backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
+            proj_dim=int(cfg.model.get("proj_dim", 512)),
+            n_cross_layers=int(cfg.model.get("n_cross_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+            use_frame_diff=bool(cfg.model.get("use_frame_diff", True)),
+        )
+
+    if name == "factor_st_net":
+        return FactorSTNet(
+            num_classes=num_classes,
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
+            backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
+            proj_dim=int(cfg.model.get("proj_dim", 256)),
+            n_blocks=int(cfg.model.get("n_blocks", 4)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+        )
+
+    if name == "motion_pyramid_net":
+        return MotionPyramidNet(
+            num_classes=num_classes,
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
+            backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
+            n_scale_layers=int(cfg.model.get("n_scale_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
         )
 
     raise ValueError(f"Unknown model.name: {name}")

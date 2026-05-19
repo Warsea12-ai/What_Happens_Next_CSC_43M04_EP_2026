@@ -1,0 +1,62 @@
+# @package _global_
+# Track A — StateCompareNet: Siamese R50 + spatial cross-attention.
+#
+# Completely different paradigm from TSM-based models.
+#
+# Every other Track A model treats this as video classification:
+#   4 frames → backbone → temporal pool → classify
+#
+# StateCompareNet treats it as state-transition detection:
+#   before_state (frames 0-1) → shared encoder → 49 spatial tokens
+#   after_state  (frames 2-3) → shared encoder → 49 spatial tokens
+#   cross-attention(before, after) → what changed, where?
+#   → classify the transition
+#
+# The cross-attention operates at 7×7 spatial resolution:
+#   each before-patch asks "did my content persist/move/disappear in the after-state?"
+# This is exactly the right inductive bias for predicting next actions.
+#
+# Architecture:
+#   Backbone:     Siamese R50 (6-channel: frame0||frame1 + frame-diff), from scratch
+#   Projection:   Linear(2048 → 512) per spatial token
+#   Cross-attn:   2 layers × Pre-LN MHSA(512, 8 heads) + FFN(512→2048→512)
+#   Head:         cat([norm(transition_pool), norm(delta)]) → Linear(1024, 512) → Linear(512, 33)
+#   Total params: ~29M
+defaults:
+  - override /model: state_compare_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  proj_dim: 512
+  n_cross_layers: 2
+  n_heads: 8
+  dropout: 0.4
+  use_frame_diff: true
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.4
+  use_cutmix: true
+  cutmix_alpha: 0.6

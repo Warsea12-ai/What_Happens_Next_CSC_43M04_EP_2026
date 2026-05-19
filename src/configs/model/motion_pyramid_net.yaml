@@ -1,0 +1,7 @@
+name: motion_pyramid_net
+num_classes: 33
+n_resnet_layers: 50
+backbone_variant: resnet
+n_scale_layers: 2
+n_heads: 8
+dropout: 0.4
