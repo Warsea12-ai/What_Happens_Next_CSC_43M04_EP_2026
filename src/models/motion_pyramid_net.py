@@ -54,7 +54,7 @@ SIGNAL PROCESSING VIEW:
   Coarse diff  = low temporal frequency (global displacement)
   This is a discrete, learned approximation of a multi-resolution temporal analysis.
 
-PARAMS: ~25M (R50 encoder) + <1M (scale attn + head) ≈ 26M, all from scratch.
+PARAMS: ~25M (R50 encoder) + ~100M (2×ScaleAttnBlock at 2048-D) + 2M (head) ≈ 126M, all from scratch.
 """
 from __future__ import annotations
 

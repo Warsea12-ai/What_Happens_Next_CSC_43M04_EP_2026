@@ -55,6 +55,7 @@ from models.vit_temporal import ViTTemporal
 from models.state_compare_net import StateCompareNet
 from models.factor_st_net import FactorSTNet
 from models.motion_pyramid_net import MotionPyramidNet
+from models.actionlet_net import ActionletNet
 from torchvision.models.video import mvit_v1_b
 
 
@@ -398,6 +399,19 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
             backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
             n_scale_layers=int(cfg.model.get("n_scale_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+        )
+
+    if name == "actionlet_net":
+        return ActionletNet(
+            num_classes=num_classes,
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
+            backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
+            proj_dim=int(cfg.model.get("proj_dim", 256)),
+            n_actionlets=int(cfg.model.get("n_actionlets", 64)),
+            n_cross_layers=int(cfg.model.get("n_cross_layers", 2)),
+            n_self_layers=int(cfg.model.get("n_self_layers", 1)),
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.4)),
         )

@@ -1,0 +1,60 @@
+# @package _global_
+# Track A — ActionletNet: Learned Actionlet Detectors via Cross-Attention.
+#
+# Complementary to the other novel Track A architectures:
+#   StateCompareNet:    WHERE did things change? (spatial cross-attention before↔after)
+#   FactorSTNet:        WHEN did things change? (per-patch 4-step trajectory)
+#   MotionPyramidNet:   AT WHAT TEMPORAL SCALE? (frequency decomposition)
+#   ActionletNet:       WHICH discriminative patterns are present? (learned detectors)
+#
+# Architecture:
+#   Shared R50 (no avgpool) → (B, 4, 49, 256) spatiotemporal tokens
+#   + temporal PE + spatial PE → flatten to (B, 196, 256)
+#   K=64 learned actionlet queries
+#   2 × cross-attention layers (queries attend to 196 video tokens)
+#   1 × self-attention layer (actionlets interact among themselves)
+#   Mean-pool over K=64 responses → LayerNorm → classify
+#
+# Key inductive bias: sparse localised patterns (actionlets) drive the
+# classification decision, not a blurred global average over all tokens.
+#
+# Params: ~29M (all trainable from scratch)
+defaults:
+  - override /model: actionlet_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  proj_dim: 256
+  n_actionlets: 64
+  n_cross_layers: 2
+  n_self_layers: 1
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0
