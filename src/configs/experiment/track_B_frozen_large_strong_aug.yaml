@@ -1,7 +1,7 @@
 # @package _global_
 # FrozenVideoMAELarge + very strong augmentation + high equivariance.
 # Backbone is frozen, so augmentation is the ONLY regulariser.
-# Stronger aug (mixup + cutmix + color jitter) should push the head
+# Stronger aug (mixup + color jitter) should push the head
 # to use more robust features from the 307M pretrained encoder.
 defaults:
   - override /model: frozen_videomae
@@ -31,5 +31,3 @@ training:
   equivariant_reverse_prob: 0.8
   use_mixup: true
   mixup_alpha: 0.8
-  use_cutmix: true
-  cutmix_alpha: 1.0

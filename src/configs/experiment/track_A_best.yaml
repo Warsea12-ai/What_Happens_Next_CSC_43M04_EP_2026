@@ -42,5 +42,3 @@ training:
 
   use_mixup: true
   mixup_alpha: 0.8
-  use_cutmix: true
-  cutmix_alpha: 1.0

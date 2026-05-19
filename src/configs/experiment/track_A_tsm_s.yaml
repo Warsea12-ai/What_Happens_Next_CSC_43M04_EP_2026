@@ -1,7 +1,7 @@
 # @package _global_
 # Track A — TSM_s ResNet-18, tuned for ~50k videos (overfits after ~30 epochs).
 #
-# Regularisation strategy: strong MixUp/CutMix (alpha=0.8/1.0) + high dropout +
+# Regularisation strategy: strong MixUp (alpha=0.8) + high dropout +
 # stochastic depth 0.25 + weight decay 5e-4. Together these push the overfitting
 # cliff from ~epoch 30 to ~epoch 60, giving the model more time to generalise.
 defaults:
@@ -42,5 +42,3 @@ training:
 
   use_mixup: true
   mixup_alpha: 0.8    # high alpha = very blended labels = strong regulariser
-  use_cutmix: true
-  cutmix_alpha: 1.0

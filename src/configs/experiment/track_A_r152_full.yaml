@@ -2,7 +2,7 @@
 # Track A — TSM_s R152, full training recipe.
 #
 # Current best (40.4%) used: no augmentation, no mixup, batch_size=8, lr=1e-4.
-# This adds everything: frame_diff, motion pooling, augmentation, mixup+cutmix,
+# This adds everything: frame_diff, motion pooling, augmentation, mixup,
 # cosine LR with warmup, random resized crop, temporal reverse equivariance.
 #
 # Run from src/:
@@ -45,5 +45,3 @@ training:
 
   use_mixup: true
   mixup_alpha: 0.8
-  use_cutmix: true
-  cutmix_alpha: 1.0

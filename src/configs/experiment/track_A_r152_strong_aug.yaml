@@ -1,10 +1,9 @@
 # @package _global_
 # Track A — R152 from scratch + maximally strong augmentation + 8 frames.
 #
-# The existing r152_8frames experiment used MixUp α=0.8 + CutMix α=1.0.
+# The existing r152_8frames experiment used MixUp α=0.8.
 # This experiment pushes augmentation even harder, targeting the overfit gap:
 #   - MixUp α=1.0 (uniform Beta — maximally mixed labels)
-#   - CutMix α=1.5 (prefers larger patches — stronger spatial regularization)
 #   - label_smoothing: 0.2 (softer targets)
 #   - stochastic_depth: 0.4 (strongest block-drop, prevents co-adaptation)
 #   - dropout: 0.5 (same)
@@ -51,5 +50,3 @@ training:
   equivariant_reverse_prob: 0.5
   use_mixup: true
   mixup_alpha: 1.0
-  use_cutmix: true
-  cutmix_alpha: 1.5

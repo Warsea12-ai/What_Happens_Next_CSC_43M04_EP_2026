@@ -183,33 +183,6 @@ def mixup_batch(
     return mixed_clips, mixed_labels
 
 
-@torch.no_grad()
-def cutmix_batch(
-    clips: torch.Tensor, labels: torch.Tensor,
-    alpha: float = 0.4, num_classes: int = 33,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """CutMix: paste a random box from a shuffled sample; returns soft labels."""
-    lam = float(torch.distributions.Beta(alpha, alpha).sample())
-    B, T, C, H, W = clips.shape
-    idx = torch.randperm(B, device=clips.device)
-
-    cut_h = int(H * (1 - lam) ** 0.5)
-    cut_w = int(W * (1 - lam) ** 0.5)
-    cy = int(torch.randint(H, (1,)))
-    cx = int(torch.randint(W, (1,)))
-    y1, y2 = max(0, cy - cut_h // 2), min(H, cy + cut_h // 2)
-    x1, x2 = max(0, cx - cut_w // 2), min(W, cx + cut_w // 2)
-
-    mixed = clips.clone()
-    mixed[:, :, :, y1:y2, x1:x2] = clips[idx, :, :, y1:y2, x1:x2]
-    lam = 1.0 - (y2 - y1) * (x2 - x1) / (H * W)  # actual lambda after clipping
-
-    y = torch.zeros(B, num_classes, device=clips.device)
-    y.scatter_(1, labels.unsqueeze(1), 1.0)
-    mixed_labels = lam * y + (1 - lam) * y[idx]
-    return mixed, mixed_labels
-
-
 def build_model(cfg: DictConfig) -> nn.Module:
     """Create the model described by cfg.model.name."""
     name = cfg.model.name
@@ -460,8 +433,6 @@ def train_one_epoch(
     use_imagenet_norm: bool = False,
     use_mixup: bool = False,
     mixup_alpha: float = 0.2,
-    use_cutmix: bool = False,
-    cutmix_alpha: float = 0.4,
     num_classes: int = 33,
 ) -> Tuple[float, float]:
     """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
@@ -492,23 +463,9 @@ def train_one_epoch(
             )
 
         soft_labels = None
-        if use_mixup and use_cutmix:
-            # Alternate randomly between MixUp and CutMix
-            if torch.rand(1).item() < 0.5:
-                video_batch, soft_labels = mixup_batch(
-                    video_batch, labels, alpha=mixup_alpha, num_classes=num_classes,
-                )
-            else:
-                video_batch, soft_labels = cutmix_batch(
-                    video_batch, labels, alpha=cutmix_alpha, num_classes=num_classes,
-                )
-        elif use_mixup:
+        if use_mixup:
             video_batch, soft_labels = mixup_batch(
                 video_batch, labels, alpha=mixup_alpha, num_classes=num_classes,
-            )
-        elif use_cutmix:
-            video_batch, soft_labels = cutmix_batch(
-                video_batch, labels, alpha=cutmix_alpha, num_classes=num_classes,
             )
 
         optimizer.zero_grad()
@@ -698,8 +655,6 @@ def main(cfg: DictConfig) -> None:
 
     use_mixup    = bool(cfg.training.get("use_mixup",    False))
     mixup_alpha  = float(cfg.training.get("mixup_alpha",  0.2))
-    use_cutmix   = bool(cfg.training.get("use_cutmix",   False))
-    cutmix_alpha = float(cfg.training.get("cutmix_alpha", 0.4))
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
@@ -719,8 +674,6 @@ def main(cfg: DictConfig) -> None:
             use_imagenet_norm=use_imagenet_norm,
             use_mixup=use_mixup,
             mixup_alpha=mixup_alpha,
-            use_cutmix=use_cutmix,
-            cutmix_alpha=cutmix_alpha,
             num_classes=num_classes,
         )
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)

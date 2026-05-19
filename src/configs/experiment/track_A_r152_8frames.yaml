@@ -1,7 +1,7 @@
 # @package _global_
 # Track A — TSM-R152 + motion head + 8-frame sampling + full augmentation.
 # The previous best (0.4036) used 8 frames with minimal augmentation.
-# This adds: motion head, frame_diff, CutMix/MixUp, RRC, equivariant reverse.
+# This adds: motion head, frame_diff, MixUp, RRC, equivariant reverse.
 # Hypothesis: 8 frames × new recipe > old 8-frame recipe (0.4036).
 defaults:
   - override /model: TSM_s
@@ -43,5 +43,3 @@ training:
 
   use_mixup: true
   mixup_alpha: 0.8
-  use_cutmix: true
-  cutmix_alpha: 1.0
