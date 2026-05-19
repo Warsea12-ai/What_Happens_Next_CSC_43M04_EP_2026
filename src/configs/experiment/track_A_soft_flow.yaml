@@ -1,0 +1,62 @@
+# @package _global_
+# Track A — SoftFlowNet: Feature-Space Soft Correspondence Tokens.
+#
+# The missing inductive bias: WHERE did each patch go between frames?
+# Computes differentiable soft optical flow in CNN feature space:
+#   corr(t→t+1)_ij = softmax( feat_{t,i} · feat_{t+1,j} / √d )
+#   flow_i = Σ_j  corr_ij · feat_{t+1,j}  −  feat_{t,i}
+#   spatially averaged → one flow token per frame pair
+#
+# Architecture:
+#   Shared R50 (no avgpool) → (B, 4, 49, 256) patch tokens
+#   4 soft-flow tokens: flow_01, flow_12, flow_23, flow_03
+#   1 appearance token: mean over all frames and patches
+#   Token-type embeddings (5 roles) injected before attention
+#   2-layer self-attention over 5 tokens → mean-pool → classify
+#
+# Complementary to all other Track A architectures:
+#   StateCompareNet:      WHERE changed? (patch cross-attn, pixel features)
+#   FactorSTNet:          WHEN changed? (per-patch self-attention over time)
+#   MotionPyramidNet:     AT WHAT SCALE? (pixel-level temporal diffs)
+#   ActionletNet:         WHICH pattern? (learned query detectors)
+#   TemporalReversalNet:  IN WHICH DIRECTION? (forward vs reversed)
+#   SoftFlowNet:          WHERE DID EACH PATCH GO? (feature-space flow)
+#
+# Params: ~27M (all trainable from scratch)
+defaults:
+  - override /model: soft_flow_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  flow_dim: 256
+  n_layers: 2
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

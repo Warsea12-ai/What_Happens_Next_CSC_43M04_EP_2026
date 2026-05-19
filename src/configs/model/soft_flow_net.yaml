@@ -1,0 +1,8 @@
+name: soft_flow_net
+num_classes: 33
+n_resnet_layers: 50
+backbone_variant: resnet
+flow_dim: 256
+n_layers: 2
+n_heads: 8
+dropout: 0.4

@@ -57,6 +57,7 @@ from models.factor_st_net import FactorSTNet
 from models.motion_pyramid_net import MotionPyramidNet
 from models.actionlet_net import ActionletNet
 from models.temporal_reversal_net import TemporalReversalNet
+from models.soft_flow_net import SoftFlowNet
 from torchvision.models.video import mvit_v1_b
 
 
@@ -423,6 +424,17 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
             backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
             proj_dim=int(cfg.model.get("proj_dim", 512)),
+            n_layers=int(cfg.model.get("n_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.4)),
+        )
+
+    if name == "soft_flow_net":
+        return SoftFlowNet(
+            num_classes=num_classes,
+            n_resnet_layers=int(cfg.model.get("n_resnet_layers", 50)),
+            backbone_variant=str(cfg.model.get("backbone_variant", "resnet")),
+            flow_dim=int(cfg.model.get("flow_dim", 256)),
             n_layers=int(cfg.model.get("n_layers", 2)),
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.4)),
