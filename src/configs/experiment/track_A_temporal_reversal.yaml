@@ -1,0 +1,61 @@
+# @package _global_
+# Track A — TemporalReversalNet: Symmetric + Asymmetric Temporal Encoding.
+#
+# Key insight: many action pairs are temporal mirrors of each other:
+#   pick_up ↔ put_down, open ↔ close, pour ↔ fill
+# Processing the sequence both forward and reversed through the same transformer
+# explicitly decomposes each video into:
+#   symmetric  component (fwd + rev) / 2 — "what kind of motion", direction-agnostic
+#   asymmetric component (fwd − rev) / 2 — "the arrow of time" / which direction
+#
+# Architecture:
+#   Shared R50 (with avgpool) → (B, 4, 2048) → project to (B, 4, 512)
+#   Forward pass [f0,f1,f2,f3] through 2-layer temporal transformer → fwd_feat
+#   Reverse pass [f3,f2,f1,f0] through SAME transformer → rev_feat
+#   Head: cat([fwd_feat, rev_feat]) → Linear(1024, 512) → Linear(512, 33)
+#
+# Complementary to all other Track A novel architectures:
+#   StateCompareNet:      WHERE changed?
+#   FactorSTNet:          WHEN changed?
+#   MotionPyramidNet:     AT WHAT SCALE?
+#   ActionletNet:         WHICH pattern?
+#   TemporalReversalNet:  IN WHICH DIRECTION?
+#
+# Params: ~33M (all trainable from scratch)
+defaults:
+  - override /model: temporal_reversal_net
+
+dataset:
+  num_frames: 4
+
+model:
+  n_resnet_layers: 50
+  backbone_variant: resnet
+  proj_dim: 512
+  n_layers: 2
+  n_heads: 8
+  dropout: 0.4
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 15
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0
