@@ -1,0 +1,54 @@
+# @package _global_
+# Track A — R152 from scratch + temporal transformer head + 8 frames.
+#
+# Replaces the motion head (first/last/delta pooling) with a 2-layer
+# self-attention transformer over the T=8 temporal feature vectors.
+#
+# Why better than motion head:
+#   motion head: fixed heuristic — always uses position 0, position T-1, mean
+#   transformer: learns which time steps matter per class dynamically
+#                class A might focus on frames 2-3; class B on frames 6-7
+#
+# The transformer uses Pre-LN MHSA + FFN with n_heads=8 (2048/8=256 per head).
+# After 2 layers, features are mean-pooled → single Linear head.
+# ~6M additional params for the transformer layers.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: transformer
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

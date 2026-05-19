@@ -1,0 +1,52 @@
+# @package _global_
+# Track A — R152 + fold_div=4 (shifts 25% of channels) + 8 frames.
+#
+# The most important TSM hyperparameter never varied. fold_div controls how
+# many channels participate in temporal shift:
+#   fold_div=8 (current best): 12.5% of channels shift → conservative mixing
+#   fold_div=4 (this):         25.0% of channels shift → stronger temporal flow
+#
+# Hypothesis: "what happens next" is a temporally-defined task. More channels
+# carrying temporal information should help the model detect state transitions.
+# Downside: fewer spatial-only channels, which may hurt spatial discriminability.
+# The correct answer for this task should be fold_div=4 or fold_div=8; this ablates.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 4
+  dropout: 0.5
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

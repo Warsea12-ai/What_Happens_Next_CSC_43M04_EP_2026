@@ -1,0 +1,57 @@
+# @package _global_
+# Track A — R152 + multi-scale features + non-local blocks + 8 frames.
+#
+# Combines the two architectural improvements that address different gaps:
+#   multiscale: richer spatial features (layer2+3+4) — 3584-D instead of 2048-D
+#   nonlocal:   global spatial self-attention in layer3 — cross-position reasoning
+#
+# These are complementary: multiscale gives more feature information;
+# nonlocal gives the model the ability to reason about spatial relationships
+# within those features. Together they should be stronger than either alone.
+#
+# Note: multiscale + NL means the 3584-D features are extracted AFTER the NL
+# block has applied spatial attention in layer3. So the layer3 contribution to
+# the multiscale concat is already attention-refined.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion
+  use_nonlocal: true
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35
+  head_hidden: false
+  use_multiscale: true
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 2
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

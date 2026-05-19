@@ -1,0 +1,52 @@
+# @package _global_
+# Track A — ResNeXt-50-32x4d from scratch + 8 frames + motion head.
+#
+# ResNeXt (Xie et al. 2017) replaces standard 3×3 convolutions with grouped
+# convolutions (32 groups × 4 channels each = 128 total). At the same FLOP
+# budget as R50, ResNeXt-50 consistently achieves 1-2% higher accuracy because
+# grouped convolutions act as an implicit ensemble of parallel pathways.
+#
+# Key difference from R50: the Bottleneck block's 3×3 conv uses groups=32.
+# This gives a wider feature representation at the same depth.
+# Output dimensionality is identical to R50 (2048-D) → same head.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 50
+  backbone_variant: resnext
+  fold_div: 8
+  dropout: 0.45
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.20
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.6
+  use_cutmix: true
+  cutmix_alpha: 0.8

@@ -1,0 +1,58 @@
+# @package _global_
+# Track A — R152 from scratch + Non-Local + transformer head + 16 frames.
+#
+# Kitchen-sink experiment combining the three architectural improvements:
+#   1. Non-Local blocks: global spatial self-attention in layer3
+#   2. Temporal transformer head: 2-layer MHSA over T=16 temporal features
+#      (replaces first/last/delta with learned temporal importance weighting)
+#   3. 16 frames: maximum temporal context available
+#
+# These three improvements address different failure modes:
+#   NL = spatial blindspot of TSM (can't see cross-location relationships)
+#   transformer = temporal blindspot of motion head (fixed positions)
+#   16 frames = temporal resolution limitation (4 real frames → 16 via repeat)
+#
+# Heaviest experiment in the batch: R152 + NL + T=16. batch_size=8 required.
+# gradient_accumulation_steps=2 → effective batch 16.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 16
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: transformer
+  use_nonlocal: true
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.4
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 2
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

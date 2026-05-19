@@ -1,0 +1,54 @@
+# @package _global_
+# Track A — R152 from scratch + multi-scale feature fusion + 8 frames.
+#
+# Same multi-scale architecture as r50_multiscale but with the deepest backbone.
+# R152 layer dims are identical to R50 per stage (512+1024+2048=3584-D total)
+# but each stage has more blocks: R50=[3,4,6,3], R152=[3,8,36,3].
+#
+# The extra depth in R152 makes higher-quality layer2/3 features — so multi-scale
+# should benefit R152 even more than R50, since the intermediate representations
+# are richer.
+#
+# batch_size=8 (R152 + multiscale forward is heavier — 3 avgpool calls vs 1).
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35
+  head_hidden: false
+  use_multiscale: true
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 2
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

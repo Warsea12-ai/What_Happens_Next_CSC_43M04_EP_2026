@@ -1,0 +1,48 @@
+# @package _global_
+# Track A — R50 from scratch + temporal transformer head + 8 frames.
+#
+# Ablates whether the transformer temporal head benefit (from r152_transformer_head)
+# is backbone-agnostic. If R50+transformer > R50+motion by a similar margin as
+# R152+transformer > R152+motion, the gain transfers across depths.
+#
+# n_heads=8: 2048/8=256 dims per head for R50 (same as R152, both 2048-D).
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 50
+  fold_div: 8
+  dropout: 0.45
+  temporal_pool: transformer
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.20
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 32
+  weight_decay: 3.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.6
+  use_cutmix: true
+  cutmix_alpha: 0.8

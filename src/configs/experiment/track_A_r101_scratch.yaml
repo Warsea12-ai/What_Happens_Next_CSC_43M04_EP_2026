@@ -1,10 +1,10 @@
 # @package _global_
-# Track A — R152 + ImageNet pretrained + motion head + 8 frames.
+# Track A — R101 from scratch + motion head + 8 frames.
 #
-# Key difference from track_A_r152_8frames: pretrained=true loads ImageNet
-# weights into the ResNet backbone. This is the single biggest missed gain
-# in all previous experiments (all trained from random initialization).
-# Expected improvement: 3-6% over the from-scratch 0.4036 baseline.
+# Fills the gap between R50 and R152. R101 is often the sweet spot for
+# from-scratch training on medium-sized datasets: deeper than R50 but
+# less prone to overfit than R152 (which has 3× more blocks in each stage).
+# Stochastic depth 0.25 is heavier than R50 (0.20) to match the added depth.
 defaults:
   - override /model: TSM_s
 
@@ -13,9 +13,9 @@ dataset:
 
 model:
   pretrained: false
-  n_resnet_layers: 152
+  n_resnet_layers: 101
   fold_div: 8
-  dropout: 0.4
+  dropout: 0.5
   temporal_pool: motion
   use_frame_diff: true
   use_positional_encoding: true
@@ -24,27 +24,24 @@ model:
   head_hidden: false
 
 training:
-  epochs: 80
-  lr: 1.0e-4
-  batch_size: 16
-  weight_decay: 5.0e-4
-  label_smoothing: 0.1
-  warmup_epochs: 5
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 24
+  weight_decay: 4.0e-4
+  label_smoothing: 0.12
+  warmup_epochs: 8
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
 
   use_random_resized_crop: true
-
   use_augment: true
   color_prob: 0.5
   color_strength: 0.15
   blur_prob: 0.0
-
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.5
-
   use_mixup: true
-  mixup_alpha: 0.4
+  mixup_alpha: 0.6
   use_cutmix: true
-  cutmix_alpha: 0.5
+  cutmix_alpha: 0.8

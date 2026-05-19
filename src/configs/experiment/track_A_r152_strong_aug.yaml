@@ -1,0 +1,55 @@
+# @package _global_
+# Track A — R152 from scratch + maximally strong augmentation + 8 frames.
+#
+# The existing r152_8frames experiment used MixUp α=0.8 + CutMix α=1.0.
+# This experiment pushes augmentation even harder, targeting the overfit gap:
+#   - MixUp α=1.0 (uniform Beta — maximally mixed labels)
+#   - CutMix α=1.5 (prefers larger patches — stronger spatial regularization)
+#   - label_smoothing: 0.2 (softer targets)
+#   - stochastic_depth: 0.4 (strongest block-drop, prevents co-adaptation)
+#   - dropout: 0.5 (same)
+#   - 150 epochs (longer schedule to compensate for harder training)
+#   - lower min_lr (1e-7 for better convergence with cosine)
+#
+# The hypothesis: R152 from-scratch overfits the 44k samples. Forcing it to
+# see harder augmentations and softer targets improves generalization.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.40
+  head_hidden: false
+
+training:
+  epochs: 150
+  lr: 5.0e-4
+  batch_size: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.2
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.6
+  color_strength: 0.2
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 1.0
+  use_cutmix: true
+  cutmix_alpha: 1.5

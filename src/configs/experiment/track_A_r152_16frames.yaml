@@ -1,0 +1,55 @@
+# @package _global_
+# Track A — R152 from scratch + 16 frames + motion head.
+#
+# The dataset has 4 real frames. With T=16, those 4 frames are repeated 4×
+# before being fed to TSM. This sounds redundant but it's not:
+#
+#   - TSM shifts 1/fold_div channels per step: with T=16, a feature can "travel"
+#     further across the temporal axis (16 steps vs 8) before being aggregated.
+#   - The temporal positional encoding distinguishes the 16 positions, so the
+#     model still knows which repeat it's in — it just has more temporal
+#     "resolution" to work with.
+#   - The motion head's first/last/delta now span a longer temporal window.
+#
+# batch_size=8: R152 + T=16 doubles the temporal dimension vs T=8.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 16
+
+model:
+  pretrained: false
+  n_resnet_layers: 152
+  fold_div: 8
+  dropout: 0.5
+  temporal_pool: motion
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.35
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 8
+  gradient_accumulation_steps: 2
+  weight_decay: 5.0e-4
+  label_smoothing: 0.15
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.8
+  use_cutmix: true
+  cutmix_alpha: 1.0

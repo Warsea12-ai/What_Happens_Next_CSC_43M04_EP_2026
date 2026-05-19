@@ -1,0 +1,56 @@
+# @package _global_
+# Track A — R50 from scratch + Non-Local blocks + 8 frames.
+#
+# TSM only shifts channels along the temporal axis — no spatial location
+# communicates with spatially distant locations. Non-local blocks (Wang et al.
+# 2018) add global O(N²) self-attention after the 2nd block of layer3, letting
+# every spatial position attend to every other.
+#
+# Why this matters for "what happens next": the action involves spatial
+# relationships (object + hand + table). TSM can't model "the hand moved
+# toward the cup" — Non-local can.
+#
+# Non-local block is inserted in layer3 (highest-level spatial features before
+# final pooling). R50 is chosen over R152 here: R152 with NL would need
+# batch_size=8 — R50 with NL fits batch=16.
+defaults:
+  - override /model: TSM_s
+
+dataset:
+  num_frames: 8
+
+model:
+  pretrained: false
+  n_resnet_layers: 50
+  fold_div: 8
+  dropout: 0.45
+  temporal_pool: motion
+  use_nonlocal: true
+  use_frame_diff: true
+  use_positional_encoding: true
+  pe_mode: sinusoidal
+  stochastic_depth: 0.20
+  head_hidden: false
+
+training:
+  epochs: 120
+  lr: 5.0e-4
+  batch_size: 16
+  weight_decay: 3.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.15
+  blur_prob: 0.0
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.6
+  use_cutmix: true
+  cutmix_alpha: 0.8

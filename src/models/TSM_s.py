@@ -19,7 +19,10 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (
+    resnet18, resnet34, resnet50, resnet101, resnet152,
+    resnext50_32x4d, resnext101_32x8d,
+)
 from torchvision.models.resnet import BasicBlock, Bottleneck
 import torch.nn.functional as F
 
@@ -30,11 +33,17 @@ import torch.nn.functional as F
 class TemporalShift(nn.Module):
     """
     Décale 1/fold_div des canaux le long de l'axe temporel.
+
+    unidirectional=True: shift only past→present (causal). Useful for tasks
+    where only preceding context should inform predictions, e.g. "what happens
+    next" — future frames shouldn't leak into earlier time steps.
     """
-    def __init__(self, n_segment: int = 4, fold_div: int = 8):
+    def __init__(self, n_segment: int = 4, fold_div: int = 8,
+                 unidirectional: bool = False):
         super().__init__()
         self.n_segment = n_segment
         self.fold_div = fold_div
+        self.unidirectional = unidirectional
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         nt, c, h, w = x.shape
@@ -43,9 +52,14 @@ class TemporalShift(nn.Module):
 
         fold = c // self.fold_div
         out = torch.zeros_like(x)
-        out[:, :-1, :fold] = x[:, 1:, :fold]                  # shift past
-        out[:, 1:, fold:2*fold] = x[:, :-1, fold:2*fold]      # shift future
-        out[:, :, 2*fold:] = x[:, :, 2*fold:]                 # unchanged
+        if self.unidirectional:
+            # Only shift past→present: frame t sees features from frame t-1
+            out[:, 1:, :fold] = x[:, :-1, :fold]              # shift from past
+            out[:, :, fold:] = x[:, :, fold:]                 # unchanged
+        else:
+            out[:, :-1, :fold] = x[:, 1:, :fold]              # shift past
+            out[:, 1:, fold:2*fold] = x[:, :-1, fold:2*fold]  # shift future
+            out[:, :, 2*fold:] = x[:, :, 2*fold:]             # unchanged
 
         return out.view(nt, c, h, w)
 
@@ -110,7 +124,8 @@ class ResidualTSMBottleneck(nn.Module):
 
 
 def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8,
-                        max_drop_prob: float = 0.0) -> None:
+                        max_drop_prob: float = 0.0,
+                        unidirectional: bool = False) -> None:
     """
     Wrappe tous les blocs résiduels du backbone. Le drop_prob augmente
     linéairement de 0 à max_drop_prob avec la profondeur (linear scaling rule
@@ -136,6 +151,8 @@ def make_temporal_shift(net: nn.Module, n_segment: int, fold_div: int = 8,
                 wrapped = ResidualTSMBasicBlock(block, n_segment, fold_div, dp)
             else:
                 raise TypeError(f"Bloc inattendu : {type(block).__name__}")
+            # Patch the shift module with the unidirectional flag after creation
+            wrapped.shift.unidirectional = unidirectional
             new_blocks.append(wrapped)
             idx += 1
         setattr(net, layer_name, nn.Sequential(*new_blocks))
@@ -280,6 +297,9 @@ class TSM_s(nn.Module):
         pretrained: bool = False,
         pretrained_backbone_path: Optional[str] = None,
         use_multiscale: bool = False,
+        motion_head_hidden: int = 512,
+        unidirectional_shift: bool = False,
+        backbone_variant: str = "resnet",
     ):
         super().__init__()
         self.n_segment = n_segment
@@ -288,30 +308,50 @@ class TSM_s(nn.Module):
         self.temporal_pool = temporal_pool
         self.use_multiscale = use_multiscale
 
+        self.unidirectional_shift = unidirectional_shift
+
+        # ResNeXt variants use Bottleneck blocks with grouped convolutions.
+        # n_resnet_layers selects depth; backbone_variant selects the family.
+        _resnext_factory = {50: resnext50_32x4d, 101: resnext101_32x8d}
         backbone_factory = {
             18: resnet18, 34: resnet34, 50: resnet50,
             101: resnet101, 152: resnet152,
         }
-
-        if n_resnet_layers not in backbone_factory:
+        _is_resnext = (backbone_variant == "resnext")
+        if _is_resnext and n_resnet_layers not in _resnext_factory:
+            raise ValueError(f"ResNeXt only supports depths 50 and 101, got {n_resnet_layers}")
+        if not _is_resnext and n_resnet_layers not in backbone_factory:
             raise ValueError(f"Unsupported n_resnet_layers: {n_resnet_layers}")
 
         if pretrained and pretrained_backbone_path is None:
             from torchvision.models import (
                 ResNet18_Weights, ResNet34_Weights, ResNet50_Weights,
                 ResNet101_Weights, ResNet152_Weights,
+                ResNeXt50_32X4D_Weights, ResNeXt101_32X8D_Weights,
             )
-            _weights = {
+            _resnet_weights = {
                 18: ResNet18_Weights.IMAGENET1K_V1,
                 34: ResNet34_Weights.IMAGENET1K_V1,
                 50: ResNet50_Weights.IMAGENET1K_V2,
                 101: ResNet101_Weights.IMAGENET1K_V2,
                 152: ResNet152_Weights.IMAGENET1K_V2,
-            }[n_resnet_layers]
-            backbone = backbone_factory[n_resnet_layers](weights=_weights)
-            print(f"TSM_s: loaded ImageNet pretrained R{n_resnet_layers} backbone.")
+            }
+            _resnext_weights = {
+                50: ResNeXt50_32X4D_Weights.IMAGENET1K_V2,
+                101: ResNeXt101_32X8D_Weights.IMAGENET1K_V2,
+            }
+            if _is_resnext:
+                _weights = _resnext_weights[n_resnet_layers]
+                backbone = _resnext_factory[n_resnet_layers](weights=_weights)
+            else:
+                _weights = _resnet_weights[n_resnet_layers]
+                backbone = backbone_factory[n_resnet_layers](weights=_weights)
+            print(f"TSM_s: loaded ImageNet pretrained {'ResNeXt' if _is_resnext else 'R'}{n_resnet_layers} backbone.")
         else:
-            backbone = backbone_factory[n_resnet_layers](weights=None)
+            if _is_resnext:
+                backbone = _resnext_factory[n_resnet_layers](weights=None)
+            else:
+                backbone = backbone_factory[n_resnet_layers](weights=None)
 
         # ---- Conv1 modifiée si frame-diff ---------------------------------
         if use_frame_diff:
@@ -337,6 +377,7 @@ class TSM_s(nn.Module):
             n_segment=n_segment,
             fold_div=fold_div,
             max_drop_prob=stochastic_depth,
+            unidirectional=unidirectional_shift,
         )
 
         in_features = backbone.fc.in_features
@@ -346,8 +387,9 @@ class TSM_s(nn.Module):
         # Multi-scale: fuse features from layer2 + layer3 + layer4.
         # Override in_features to the concatenated dimension.
         if use_multiscale:
-            _bottleneck = {50, 101, 152}
-            _stage_dims = [512, 1024, 2048] if n_resnet_layers in _bottleneck else [128, 256, 512]
+            _bottleneck_depths = {50, 101, 152}
+            _uses_bottleneck = _is_resnext or (n_resnet_layers in _bottleneck_depths)
+            _stage_dims = [512, 1024, 2048] if _uses_bottleneck else [128, 256, 512]
             in_features = sum(_stage_dims)
 
         # ---- Load SSL-pretrained backbone (optional) -----------------------
@@ -395,18 +437,17 @@ class TSM_s(nn.Module):
 
         # ---- Tête de classification ---------------------------------------
         if temporal_pool == "motion":
-            # Motion-aware head: [global, first, last, delta] → 4*D → 512 → num_classes
-            # Separate LayerNorms keep each feature type well-scaled before concat.
+            # Motion-aware head: [global, first, last, delta] → 4*D → motion_head_hidden → num_classes
             self.norm_global = nn.LayerNorm(in_features)
             self.norm_first  = nn.LayerNorm(in_features)
             self.norm_last   = nn.LayerNorm(in_features)
             self.norm_delta  = nn.LayerNorm(in_features)
             self.head = nn.Sequential(
                 nn.Dropout(dropout),
-                nn.Linear(4 * in_features, 512),
+                nn.Linear(4 * in_features, motion_head_hidden),
                 nn.GELU(),
                 nn.Dropout(dropout * 0.5),
-                nn.Linear(512, num_classes),
+                nn.Linear(motion_head_hidden, num_classes),
             )
         elif head_hidden:
             self.head = nn.Sequential(
