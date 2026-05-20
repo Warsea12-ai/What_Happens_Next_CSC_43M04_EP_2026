@@ -70,10 +70,14 @@ class QwenVLLoRA(nn.Module):
         _hp, _wp = _H // ps, _W // ps
         _dummy_pv = torch.zeros(_tg * _hp * _wp, 3 * tps * ps * ps, dtype=torch.bfloat16)
         _dummy_grid = torch.tensor([[_tg, _hp, _wp]], dtype=torch.long)
+        _sms = self.spatial_merge_size
+        _hpo = _hp // _sms
+        _wpo = _wp // _sms
         with torch.no_grad():
             _out = self.visual(_dummy_pv, grid_thw=_dummy_grid)
             _raw = _out.last_hidden_state if hasattr(_out, "last_hidden_state") else _out
-        hidden = int(_raw.shape[-1])
+        # Reshape as forward() does to get effective hidden (handles 7B non-merged output).
+        hidden = int(_raw.reshape(_tg * _hpo * _wpo, -1).shape[-1])
 
         self.norm_global = nn.LayerNorm(hidden)
         self.norm_first  = nn.LayerNorm(hidden)

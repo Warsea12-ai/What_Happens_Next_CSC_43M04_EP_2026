@@ -117,10 +117,18 @@ class QwenVLVideo(nn.Module):
             _tg * _hp * _wp, 3 * tps * ps * ps, dtype=torch.bfloat16,
         )
         _dummy_grid = torch.tensor([[_tg, _hp, _wp]], dtype=torch.long)
+        _sms = self.spatial_merge_size
+        _hpo = _hp // _sms
+        _wpo = _wp // _sms
         with torch.no_grad():
             _out = self.visual(_dummy_pv, grid_thw=_dummy_grid)
             _raw = _out.last_hidden_state if hasattr(_out, "last_hidden_state") else _out
-        hidden = int(_raw.shape[-1])
+        # Simulate the actual reshape done in forward() to get the effective hidden dim.
+        # For 2B the merger is applied inside self.visual → _raw shape=(tg*hpo*wpo, H).
+        # For 7B the merger is NOT applied → _raw shape=(tg*hp*wp, H), and the forward
+        # reshape folds the spatial_merge_size^2 extra tokens into the feature dim.
+        _tokens = _raw.reshape(1, _tg, _hpo * _wpo, -1)
+        hidden = int(_tokens.shape[-1])
 
         self.norm_global = nn.LayerNorm(hidden)
         self.norm_first  = nn.LayerNorm(hidden)
