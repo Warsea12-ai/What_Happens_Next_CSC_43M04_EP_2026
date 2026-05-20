@@ -1,0 +1,50 @@
+# @package _global_
+# Track B — VideoMAEDomainAdapted: fine-tune from a domain-adapted backbone.
+#
+# After running pretrain_videomae.py (which does masked video modeling on the
+# 44k competition videos), this experiment fine-tunes the adapted backbone for
+# the 33-class classification task.
+#
+# Set backbone_path to the file saved by pretrain_videomae.py:
+#   model.backbone_path=/path/to/outputs/pretrained_videomae/backbone_best.pt
+#
+# If backbone_path is empty or not found, falls back to the HuggingFace SSv2
+# checkpoint (same as track_B_videomae_temporal_head).
+#
+# Expected gain from domain adaptation: +1-3% on top of SSv2 backbone.
+defaults:
+  - override /model: videomae_domain_adapted
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  backbone_path: ""   # override: model.backbone_path=outputs/pretrained_videomae/backbone_best.pt
+  num_frozen_blocks: 12
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+
+training:
+  epochs: 60
+  lr: 1.5e-4           # slightly lower — adapted backbone is already in-domain
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

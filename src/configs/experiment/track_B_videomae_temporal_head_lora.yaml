@@ -1,0 +1,49 @@
+# @package _global_
+# Track B — VideoMAETemporalHead with LoRA adapters on all 24 encoder blocks.
+#
+# Freeze the 307M encoder entirely, then inject rank-8 LoRA adapters on Q,V
+# of every attention block. This lets ALL 24 blocks adapt via ~3M extra params
+# (vs. unfreezing 12 blocks = ~150M params with gradient tape through them).
+#
+# Advantages over num_frozen_blocks=12:
+#   - batch_size=32 feasible (no gradient through frozen weights)
+#   - All 24 blocks adapt, including early feature extractors
+#   - Very low catastrophic forgetting risk (adapters are tiny Δ)
+#
+# Combine with temporal head improvements (spatial attention + temporal transformer).
+defaults:
+  - override /model: videomae_temporal_head
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  num_frozen_blocks: 24   # ignored when lora_rank > 0
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+  lora_rank: 8
+  lora_alpha: 16.0
+
+training:
+  epochs: 70
+  lr: 3.0e-4
+  backbone_lr_scale: 0.05  # LoRA adapters at 5% of head LR
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

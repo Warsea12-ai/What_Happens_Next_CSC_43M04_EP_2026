@@ -1,0 +1,10 @@
+name: videomae_temporal_head
+num_classes: 33
+backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+num_frozen_blocks: 12
+n_temporal_layers: 3
+n_heads: 8
+dropout: 0.3
+head_hidden: 1024
+lora_rank: 0
+lora_alpha: 16.0

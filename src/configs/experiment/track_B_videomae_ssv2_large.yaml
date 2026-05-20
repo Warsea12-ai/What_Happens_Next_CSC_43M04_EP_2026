@@ -1,0 +1,40 @@
+# @package _global_
+# Track B — DynamicVideoMAE with VideoMAE-Large SSv2 backbone.
+#
+# KEY CHANGE vs. track_B_dynamic_videomae: backbone is SSv2-pretrained, not Kinetics.
+# MCG-NJU/videomae-large-finetuned-ssv2 is trained on hand-object manipulation videos
+# (Something-Something v2) — same visual domain as our 33 challenge classes.
+# Expected: +2-4% over the Kinetics-pretrained equivalent.
+#
+# Same temporal pyramid head (8 features) and LLRD as DynamicVideoMAE.
+defaults:
+  - override /model: dynamic_videomae
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  num_frozen_blocks: 12
+  dropout: 0.3
+
+training:
+  epochs: 60
+  lr: 2.0e-4
+  backbone_lr_scale: 0.1
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: false

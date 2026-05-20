@@ -41,6 +41,8 @@ from models.bidirectional_frame_pair import BidirectionalFramePairNet
 from models.qwen_temporal_attn import QwenTemporalAttn
 from models.videomae_lora import VideoMAELoRA
 from models.qwen_lora import QwenVLLoRA
+from models.videomae_temporal_head import VideoMAETemporalHead
+from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -282,6 +284,29 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             head_hidden=int(cfg.model.get("head_hidden", 768)),
+        )
+    if name == "videomae_temporal_head":
+        return VideoMAETemporalHead(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            lora_rank=int(cfg.model.get("lora_rank", 0)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 16.0)),
+        )
+    if name == "videomae_domain_adapted":
+        return VideoMAEDomainAdapted(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            backbone_path=str(cfg.model.get("backbone_path", "")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

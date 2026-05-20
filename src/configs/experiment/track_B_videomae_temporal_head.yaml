@@ -1,0 +1,48 @@
+# @package _global_
+# Track B — VideoMAETemporalHead: SSv2-Large backbone + spatial attention pooling
+# + temporal self-attention head.
+#
+# Two simultaneous improvements over DynamicVideoMAE:
+#   1. SSv2 backbone (same domain as challenge) — vs Kinetics in other experiments
+#   2. Spatial attention pooling: learned query per temporal group selects
+#      informative spatial patches (foreground object) vs. background.
+#   3. Temporal transformer (3-layer, [CLS]+8 tokens): captures temporal
+#      dynamics beyond simple linear deltas.
+#
+# Fine-tunes the top 12 of 24 encoder blocks with LLRD.
+defaults:
+  - override /model: videomae_temporal_head
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  num_frozen_blocks: 12
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+  lora_rank: 0
+
+training:
+  epochs: 60
+  lr: 2.0e-4
+  backbone_lr_scale: 0.1
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
