@@ -27,7 +27,7 @@ Usage:
     # or with custom args:
     uv run python pretrain_videomae.py \\
         --backbone MCG-NJU/videomae-large \\
-        --init_from MCG-NJU/videomae-large-finetuned-ssv2 \\
+        --init_from MCG-NJU/videomae-base-finetuned-ssv2 \\
         --data_dir ../data \\
         --output_dir ../outputs/pretrained_videomae \\
         --epochs 10 \\
@@ -194,7 +194,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="VideoMAE domain-adaptive pretraining")
     parser.add_argument("--backbone",   default="MCG-NJU/videomae-large",
                         help="Base VideoMAEForPreTraining checkpoint (must include decoder)")
-    parser.add_argument("--init_from",  default="MCG-NJU/videomae-large-finetuned-ssv2",
+    parser.add_argument("--init_from",  default="MCG-NJU/videomae-base-finetuned-ssv2",
                         help="Optional fine-tuned checkpoint to init encoder from")
     parser.add_argument("--data_dir",   default="../data",
                         help="Root directory with training videos")

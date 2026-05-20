@@ -32,7 +32,7 @@ class VideoMAEDomainAdapted(nn.Module):
     def __init__(
         self,
         num_classes: int = 33,
-        backbone: str = "MCG-NJU/videomae-large-finetuned-ssv2",
+        backbone: str = "MCG-NJU/videomae-base-finetuned-ssv2",
         backbone_path: str = "",
         num_frozen_blocks: int = 12,
         n_temporal_layers: int = 3,

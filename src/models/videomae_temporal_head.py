@@ -2,7 +2,7 @@
 
 Two key improvements over DynamicVideoMAE (which uses simple mean-pooling):
 
-1. SSv2-domain backbone by default (MCG-NJU/videomae-large-finetuned-ssv2).
+1. SSv2-domain backbone by default (MCG-NJU/videomae-base-finetuned-ssv2).
    SSv2 = hand-object manipulation, same visual domain as our 33 classes.
    vs. Kinetics = outdoor sports/scenes. Expected +2-4% from better transfer.
 
@@ -98,7 +98,7 @@ class VideoMAETemporalHead(nn.Module):
     def __init__(
         self,
         num_classes: int = 33,
-        backbone: str = "MCG-NJU/videomae-large-finetuned-ssv2",
+        backbone: str = "MCG-NJU/videomae-base-finetuned-ssv2",
         num_frozen_blocks: int = 12,
         n_temporal_layers: int = 3,
         n_heads: int = 8,

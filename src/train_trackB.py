@@ -288,7 +288,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "videomae_temporal_head":
         return VideoMAETemporalHead(
             num_classes=int(cfg.model.num_classes),
-            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
             n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
             n_heads=int(cfg.model.get("n_heads", 8)),
@@ -300,7 +300,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "videomae_domain_adapted":
         return VideoMAEDomainAdapted(
             num_classes=int(cfg.model.num_classes),
-            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-ssv2")),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
             backbone_path=str(cfg.model.get("backbone_path", "")),
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 12)),
             n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),

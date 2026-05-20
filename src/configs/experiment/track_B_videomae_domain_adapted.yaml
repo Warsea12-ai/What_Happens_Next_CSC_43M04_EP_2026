@@ -16,7 +16,7 @@ defaults:
   - override /model: videomae_domain_adapted
 
 model:
-  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
   backbone_path: ""   # override: model.backbone_path=outputs/pretrained_videomae/backbone_best.pt
   num_frozen_blocks: 12
   n_temporal_layers: 3

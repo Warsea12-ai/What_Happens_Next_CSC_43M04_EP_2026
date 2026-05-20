@@ -15,7 +15,7 @@ defaults:
   - override /model: videomae_temporal_head
 
 model:
-  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
   num_frozen_blocks: 24   # ignored when lora_rank > 0
   n_temporal_layers: 3
   n_heads: 8

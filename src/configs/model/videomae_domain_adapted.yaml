@@ -1,6 +1,6 @@
 name: videomae_domain_adapted
 num_classes: 33
-backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
 backbone_path: ""
 num_frozen_blocks: 12
 n_temporal_layers: 3
