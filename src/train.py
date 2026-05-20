@@ -322,7 +322,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
     if name == "swin3d_finetune":
         return VideoSwinFinetune(
             num_classes=int(cfg.model.num_classes),
-            pretrained=bool(cfg.model.pretrained),
+            pretrained=bool(cfg.model.get("pretrained", False)),
             dropout=float(cfg.model.get("dropout", 0.5)),
         )
 
@@ -693,7 +693,7 @@ def main(cfg: DictConfig) -> None:
                 "model_state_dict": model.state_dict(),
                 "model_name": cfg.model.name,
                 "num_classes": int(cfg.model.num_classes),
-                "pretrained": bool(cfg.model.pretrained),
+                "pretrained": bool(cfg.model.get("pretrained", False)),
                 "use_imagenet_norm": use_imagenet_norm,
                 "num_frames": int(cfg.dataset.num_frames),
                 "val_accuracy": val_acc,
