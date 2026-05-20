@@ -134,7 +134,7 @@ class FramePairNet(nn.Module):
         with torch.no_grad():
             _out = self.visual(_dummy_pv, grid_thw=_dummy_grid)
             _raw = _out.last_hidden_state if hasattr(_out, "last_hidden_state") else _out
-        hidden = int(_raw.shape[-1])
+        hidden = int(_raw.reshape(_N_TOKENS, -1).shape[-1])
 
         self.cross_layers = nn.ModuleList([
             _CrossAttnBlock(hidden, n_heads, dropout)
