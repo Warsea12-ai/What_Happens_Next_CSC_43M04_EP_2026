@@ -1,0 +1,38 @@
+# @package _global_
+# SSv2 Base + temporal head à 4 couches (vs 3 dans temporal_head_ssv2).
+# Plus de profondeur temporelle pour capturer les dépendances multi-frames.
+# Hypothèse : 4 couches de self-attention temporelle > 3 pour prédire l'ordre.
+defaults:
+  - override /model: videomae_temporal_head
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 6
+  n_temporal_layers: 4
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+  lora_rank: 0
+
+training:
+  epochs: 70
+  lr: 2.0e-4
+  backbone_lr_scale: 0.1
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.3

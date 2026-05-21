@@ -1,0 +1,36 @@
+# @package _global_
+# VideoMAE-Large Kinetics + LoRA rank=16 + forte augmentation.
+# videomae_lora_rank16 (sole) tourne sans aug forte. Ce variant y ajoute mixup+equivariance.
+# Large capacity (307M) + aug forte pour éviter overfitting sur le petit dataset.
+defaults:
+  - override /model: videomae_lora
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+  lora_rank: 16
+  lora_alpha: 32.0
+  dropout: 0.35
+  head_hidden: 1024
+
+training:
+  epochs: 70
+  lr: 2.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.7
+  use_mixup: true
+  mixup_alpha: 0.5

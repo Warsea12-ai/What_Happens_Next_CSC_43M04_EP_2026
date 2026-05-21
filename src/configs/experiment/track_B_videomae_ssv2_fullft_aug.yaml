@@ -1,0 +1,36 @@
+# @package _global_
+# SSv2 Base + fine-tune complet (0 frozen) + forte augmentation.
+# ssv2_deep = 0 frozen mais aug légère. ssv2_aug = 6 frozen + forte aug.
+# Ce variant combine les deux : full fine-tune + forte aug pour régulariser.
+# LLRD fort (0.75) : bloc 11 à lr*0.02, bloc 0 à ~lr*0.02*0.75^11 ≈ lr*0.001.
+defaults:
+  - override /model: videomae
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  dropout: 0.35
+
+training:
+  epochs: 60
+  lr: 2.0e-4
+  backbone_lr_scale: 0.02
+  llrd_factor: 0.75
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.12
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.7
+  use_mixup: true
+  mixup_alpha: 0.5

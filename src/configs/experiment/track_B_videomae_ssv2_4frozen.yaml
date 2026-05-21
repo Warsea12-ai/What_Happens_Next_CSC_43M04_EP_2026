@@ -1,0 +1,35 @@
+# @package _global_
+# SSv2 Base + 4 frozen blocks (fine-tune 8 blocs sur 12).
+# Plus de capacité d'adaptation que ssv2 (6 frozen) mais moins que ssv2_deep (0 frozen).
+# LR backbone légèrement plus élevé pour profiter des blocs supplémentaires dégelés.
+defaults:
+  - override /model: videomae
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 4
+  dropout: 0.25
+
+training:
+  epochs: 70
+  lr: 5.0e-5
+  backbone_lr_scale: 0.08
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.3
