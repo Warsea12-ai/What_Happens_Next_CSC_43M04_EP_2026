@@ -31,6 +31,7 @@ _TRACK_B_MODELS = {
     "bidirectional_frame_pair", "qwen_temporal_attn",
     "videomae_lora", "qwen_lora",
     "videomae_temporal_head", "videomae_domain_adapted",
+    "videomae_pair_attn",
 }
 
 
