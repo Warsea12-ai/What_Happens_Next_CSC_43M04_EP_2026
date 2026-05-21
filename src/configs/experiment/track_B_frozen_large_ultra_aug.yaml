@@ -1,0 +1,35 @@
+# @package _global_
+# Track B — FrozenVideoMAELarge ultra augmentation.
+#
+# frozen_large_strong_aug → 20.8% à ep.19/80 (2ème meilleur Track B).
+# ultra_aug : pousse l'augmentation au maximum — le backbone gelé est robuste,
+# donc l'aug extrême force la tête à apprendre des features invariants.
+# equivariant_reverse_prob=0.9 : presque toujours l'équivariance temporelle.
+defaults:
+  - override /model: frozen_videomae
+
+model:
+  dropout: 0.5
+  head_hidden: 1024
+
+training:
+  epochs: 100
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  batch_size: 64
+  weight_decay: 1.0e-3
+  label_smoothing: 0.15
+  warmup_epochs: 10
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.9
+  color_strength: 0.5
+  blur_prob: 0.2
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.9
+  use_mixup: true
+  mixup_alpha: 1.0

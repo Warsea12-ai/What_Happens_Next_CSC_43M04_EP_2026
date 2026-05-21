@@ -1,0 +1,36 @@
+# @package _global_
+# Track B — MotionVideoMAE v2 : double les epochs, mixup, aug plus forte.
+#
+# motion_videomae était à 32.5% val_acc à epoch 18/40 — le meilleur Track B.
+# v2 : 80 epochs + mixup (comme frozen_large_strong_aug) + color plus fort.
+# Hypothèse : le delta temporel est déjà excellent ; plus d'epochs + mixup
+# devrait pousser au-delà de 40%.
+defaults:
+  - override /model: motion_videomae
+
+model:
+  num_frozen_blocks: 8
+  dropout: 0.3
+
+training:
+  epochs: 80
+  lr: 3.0e-4
+  backbone_lr_scale: 0.067
+  llrd_factor: 0.75
+  batch_size: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.12
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
