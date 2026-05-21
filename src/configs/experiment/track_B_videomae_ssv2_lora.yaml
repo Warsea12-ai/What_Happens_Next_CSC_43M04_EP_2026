@@ -1,0 +1,39 @@
+# @package _global_
+# Track B — VideoMAE-Base SSv2 + LoRA (variante 1/5 amélioration VideoMAE).
+#
+# videomae_lora utilise Large+Kinetics. Ce config utilise Base+SSv2 :
+# le backbone SSv2 est IN-DOMAIN pour notre tâche (Something-Something v2
+# prédit aussi l'ordre temporel des actions). LoRA adapte tous les blocs
+# sans catastrophic forgetting du prétraining SSv2.
+defaults:
+  - override /model: videomae_lora
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  lora_rank: 8
+  lora_alpha: 16.0
+  dropout: 0.3
+  head_hidden: 512
+
+training:
+  epochs: 70
+  lr: 3.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 32
+  grad_accum_steps: 2
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.3

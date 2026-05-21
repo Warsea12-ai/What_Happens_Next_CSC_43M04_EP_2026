@@ -1,0 +1,36 @@
+# @package _global_
+# Track B — VideoMAE-Base SSv2 fine-tune profond (variante 2/5).
+#
+# Hypothèse : le backbone SSv2 est déjà très aligné avec notre tâche.
+# Fine-tuner TOUS les blocs avec un très faible LR backbone peut extraire
+# encore plus de signal temporel sans detruire le prétraining.
+# LLRD agressif : bloc 11 à 3e-6, bloc 0 à ~3e-7 (decay 0.75^11 ≈ 0.04).
+defaults:
+  - override /model: videomae
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  dropout: 0.3
+
+training:
+  epochs: 60
+  lr: 2.0e-4
+  backbone_lr_scale: 0.015
+  llrd_factor: 0.75
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5

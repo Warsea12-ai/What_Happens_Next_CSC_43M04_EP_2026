@@ -1,0 +1,39 @@
+# @package _global_
+# Track B — VideoMAE-Base SSv2 + LoRA rank=16 (variante 5/5).
+#
+# videomae_ssv2_lora utilise rank=8. Ce variant pousse à rank=16 :
+# plus de capacité d'adaptation (~6M params LoRA vs ~3M) sur le backbone SSv2.
+# Hypothèse : la tâche de prédiction d'ordre temporel nécessite une adaptation
+# plus profonde des features du backbone que ce que rank=8 permet.
+defaults:
+  - override /model: videomae_lora
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  lora_rank: 16
+  lora_alpha: 32.0
+  dropout: 0.3
+  head_hidden: 768
+
+training:
+  epochs: 70
+  lr: 2.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.3
