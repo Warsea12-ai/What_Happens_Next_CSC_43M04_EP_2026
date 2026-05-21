@@ -185,6 +185,19 @@ class VideoMAEPairAttn(nn.Module):
             return []
         return get_lora_parameters(self.encoder)
 
+    def layerwise_lr_groups(self, head_lr: float, backbone_lr: float, llrd: float = 0.85):
+        groups = [{"params": self.head_parameters(), "lr": head_lr}]
+        if self._use_lora:
+            groups.append({"params": self.lora_parameters(), "lr": backbone_lr})
+            return groups
+        n_layers = len(self.encoder.encoder.layer)
+        for depth, idx in enumerate(range(n_layers - 1, self.num_frozen_blocks - 1, -1)):
+            groups.append({
+                "params": list(self.encoder.encoder.layer[idx].parameters()),
+                "lr": backbone_lr * (llrd ** depth),
+            })
+        return groups
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B = x.shape[0]
         device, dtype = x.device, x.dtype
