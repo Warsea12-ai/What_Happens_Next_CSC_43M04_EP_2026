@@ -70,7 +70,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from torchvision.models import resnet50, resnet101
+from torchvision.models import resnet50, resnet101, resnet152
 from torchvision.models import resnext50_32x4d, resnext101_32x8d
 
 
@@ -116,6 +116,7 @@ class TemporalReversalNet(nn.Module):
         _factories = {
             ("resnet",  50):  resnet50,
             ("resnet",  101): resnet101,
+            ("resnet",  152): resnet152,
             ("resnext", 50):  resnext50_32x4d,
             ("resnext", 101): resnext101_32x8d,
         }
