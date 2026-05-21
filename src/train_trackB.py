@@ -43,6 +43,7 @@ from models.videomae_lora import VideoMAELoRA
 from models.qwen_lora import QwenVLLoRA
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
+from models.videomae_pair_attn import VideoMAEPairAttn
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -307,6 +308,18 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
+        )
+    if name == "videomae_pair_attn":
+        return VideoMAEPairAttn(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 6)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
