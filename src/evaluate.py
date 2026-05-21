@@ -95,7 +95,11 @@ def main(cfg: DictConfig) -> None:
     # Normalization must exactly match what was used during training.
     # Checkpoints from train_trackA/B.py store use_imagenet_norm explicitly.
     # Older checkpoints fall back to the pretrained flag (original heuristic).
-    use_imagenet_norm = bool(raw.get("use_imagenet_norm", raw.get("pretrained", cfg.model.pretrained)))
+    use_imagenet_norm = bool(
+        raw["use_imagenet_norm"] if "use_imagenet_norm" in raw
+        else raw["pretrained"] if "pretrained" in raw
+        else cfg.model.get("pretrained", True)
+    )
     use_multi_crop = bool(cfg.training.get("use_multi_crop", False))
     use_tta = bool(cfg.training.get("use_tta", False))
 
