@@ -1,0 +1,7 @@
+name: internvit6b_temporal
+num_classes: 33
+backbone: "OpenGVLab/InternViT-6B-448px-V2_5"
+proj_dim: 512
+n_set_layers: 3
+n_heads: 8
+dropout: 0.25

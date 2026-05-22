@@ -51,6 +51,7 @@ from models.dinov3_temporal import DINOv3Temporal
 from models.videomae_large import VideoMAELarge
 from models.vjepa2_head import VJEPA2Head
 from models.internvl2_classifier import InternVL2Classifier
+from models.internvit6b_temporal import InternViT6BTemporal
 from utils import build_transforms, set_seed, split_train_val
 
 import os
@@ -394,6 +395,15 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             num_frozen_llm_layers=int(cfg.model.get("num_frozen_llm_layers", 24)),
+        )
+    if name == "internvit6b_temporal":
+        return InternViT6BTemporal(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "OpenGVLab/InternViT-6B-448px-V2_5")),
+            proj_dim=int(cfg.model.get("proj_dim", 512)),
+            n_set_layers=int(cfg.model.get("n_set_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

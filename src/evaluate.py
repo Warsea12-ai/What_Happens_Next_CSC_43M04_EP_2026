@@ -39,6 +39,7 @@ _TRACK_B_MODELS = {
     "videomae_large",
     "vjepa2_head",
     "internvl2_classifier",
+    "internvit6b_temporal",
 }
 
 

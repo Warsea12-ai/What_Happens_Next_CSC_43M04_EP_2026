@@ -1,0 +1,64 @@
+# @package _global_
+# InternViT-6B + Set Transformer permutation-invariant
+#
+# Pourquoi c'est plus intelligent qu'InternVL2-8B
+# ─────────────────────────────────────────────────
+# InternVL2-8B utilise InternViT-300M (300M params vision)
+# Ce modèle utilise InternViT-6B  (6 000M params vision) = 20× plus de capacité
+# Le LLM (20B) est rejeté : inutile pour de la classification.
+#
+# Pourquoi le Set Transformer
+# ────────────────────────────
+# Les 4 frames en entrée sont dans un ordre QUELCONQUE.
+# Un Set Transformer n'a pas de positional encoding entre frames
+# → invariant à la permutation par construction → aucun artefact d'ordre.
+# Un simple mean-pool est aussi invariant mais aveugle.
+# Le Set Transformer apprend à pondérer les frames selon leur contenu.
+#
+# Augmentation par permutation aléatoire des frames
+# ──────────────────────────────────────────────────
+# temporal_jitter=24 shuffle les frames aléatoirement à chaque sample.
+# Force le Set Transformer à ne jamais pouvoir utiliser l'ordre positionnel.
+#
+# Mémoire sur A5000 24 GB :
+#   InternViT-6B bfloat16 (frozen) : ~12 GB
+#   Proj + SetTransformer + tête    :  ~0.1 GB
+#   Activations batch=8, 448px      :  ~6 GB
+#   Total                           : ~18 GB → confortable
+defaults:
+  - override /model: internvit6b_temporal
+
+model:
+  backbone: "OpenGVLab/InternViT-6B-448px-V2_5"
+  proj_dim: 512
+  n_set_layers: 3
+  n_heads: 8
+  dropout: 0.25
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0   # backbone entièrement gelé
+  llrd_factor: 0.0
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  # temporal_jitter > 0 → permutation aléatoire des frames à chaque sample
+  # Force l'invariance à l'ordre pendant l'entraînement
+  temporal_jitter: 24
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
