@@ -18,6 +18,37 @@ Le wrapper est défensif : il tolère plusieurs conventions de sortie
 """
 from __future__ import annotations
 
+import sys
+import types
+
+
+# Le modeling file InternVideo2 sur HF déclare `import cv2` et `import flash_attn`
+# au top-level. transformers.check_imports refuse de charger le fichier si l'un
+# n'est pas importable. On stub-out les deux pour que check_imports passe ; les
+# vraies fonctions doivent être installées séparément si le forward s'en sert.
+class _LooseStub(types.ModuleType):
+    """Module factice permissif : tout attribut renvoie un sous-stub.
+    Tolère `from X import Y`, `import X.Y.Z`, etc. Si le modèle APPELLE
+    réellement les fonctions, ça plantera proprement avec un TypeError."""
+    def __getattr__(self, name: str):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        sub = _LooseStub(f"{self.__name__}.{name}")
+        setattr(self, name, sub)
+        sys.modules[sub.__name__] = sub
+        return sub
+
+    def __call__(self, *args, **kwargs):
+        return None
+
+
+for _stub_name in ("cv2", "flash_attn"):
+    try:
+        __import__(_stub_name)
+    except ImportError:
+        sys.modules[_stub_name] = _LooseStub(_stub_name)
+
+
 import torch
 import torch.nn as nn
 from transformers import AutoModel
