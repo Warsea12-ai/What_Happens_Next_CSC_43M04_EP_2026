@@ -41,6 +41,7 @@ _TRACK_B_MODELS = {
     "internvl2_classifier",
     "internvit6b_temporal",
     "internvit6b_pairwise",
+    "vjepa2_variants",
 }
 
 

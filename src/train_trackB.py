@@ -53,6 +53,7 @@ from models.vjepa2_head import VJEPA2Head
 from models.internvl2_classifier import InternVL2Classifier
 from models.internvit6b_temporal import InternViT6BTemporal
 from models.internvit6b_pairwise import InternViT6BPairwise
+from models.vjepa2_variants import VJEPA2Variant
 from utils import build_transforms, set_seed, split_train_val
 
 import os
@@ -405,6 +406,17 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_set_layers=int(cfg.model.get("n_set_layers", 3)),
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.25)),
+        )
+    if name == "vjepa2_variants":
+        return VJEPA2Variant(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitg-fpc64-384-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 32)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            variant=str(cfg.model.get("variant", "lora")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
         )
     if name == "internvit6b_pairwise":
         return InternViT6BPairwise(

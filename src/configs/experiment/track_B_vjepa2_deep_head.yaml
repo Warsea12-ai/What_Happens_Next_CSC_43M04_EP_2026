@@ -1,0 +1,32 @@
+# @package _global_
+# V-JEPA 2 — tête MLP profonde 1408→2048→1024→33 (analogue à videomae_ssv2_deep)
+# Hypothèse : la tête simple (1 couche cachée) est un goulot d'étranglement.
+defaults:
+  - override /model: vjepa2_variants
+model:
+  variant: "deep_head"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

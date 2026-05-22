@@ -1,0 +1,9 @@
+name: vjepa2_variants
+num_classes: 33
+backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+num_frozen_blocks: 32
+dropout: 0.25
+head_hidden: 2048
+variant: "lora"
+lora_rank: 16
+lora_alpha: 32.0

@@ -1,0 +1,33 @@
+# @package _global_
+# V-JEPA 2 — full finetune (0/40 gelé) avec forte régularisation
+# Analogue à track_B_videomae_ssv2_fullft_aug mais sur V-JEPA 2.
+# Risqué mais informatif : montre si full FT catastrophically forgets sur 20 epochs.
+defaults:
+  - override /model: vjepa2_head
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 0
+  dropout: 0.3
+  head_hidden: 2048
+training:
+  epochs: 20
+  lr: 2.0e-5
+  backbone_lr_scale: 0.1
+  llrd_factor: 0.85
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 0.1
+  label_smoothing: 0.15
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 0.5
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.4
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.6
