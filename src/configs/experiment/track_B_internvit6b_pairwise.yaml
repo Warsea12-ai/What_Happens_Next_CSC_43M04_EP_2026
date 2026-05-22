@@ -1,0 +1,51 @@
+# @package _global_
+# InternViT-6B + cross-attention pairwise — direction temporelle explicite
+#
+# Différence avec internvit6b_temporal (Set Transformer)
+# ────────────────────────────────────────────────────────
+# Set Transformer : traite les 4 frames comme un ensemble non-ordonné
+#   → ne peut pas distinguer "Opening" (fermé→ouvert)
+#      de "Closing" (ouvert→fermé) si les frames ont les mêmes états visuels
+#
+# Pairwise cross-attention : modélise les 12 paires ordonnées (i→j)
+#   → cross_attn(frame_j, frame_i) ≠ cross_attn(frame_i, frame_j)
+#   → la direction est encodée explicitement dans chaque relation
+#
+# Chaque paire encode "qu'est-ce qui a changé en allant de frame i à frame j ?"
+# Les 12 paires (4×3 ordered) couvrent toutes les transitions directionnelles.
+#
+# Pas de temporal_jitter : l'ordre d'entrée reste aléatoire (shuffled par le dataset)
+# mais le modèle voit TOUTES les paires ordonnées → robuste à l'ordre d'entrée,
+# sensible à la direction temporelle.
+defaults:
+  - override /model: internvit6b_pairwise
+
+model:
+  backbone: "OpenGVLab/InternViT-6B-448px-V2_5"
+  proj_dim: 512
+  n_heads: 8
+  dropout: 0.25
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
