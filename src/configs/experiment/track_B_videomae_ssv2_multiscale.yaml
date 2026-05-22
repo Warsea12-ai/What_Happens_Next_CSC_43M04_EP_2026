@@ -1,0 +1,52 @@
+# @package _global_
+# VideoMAEMultiScale : features multi-echelle + transformeur temporel sans PE.
+#
+# Innovation : au lieu de pooler uniquement la couche finale de VideoMAE
+# (optimisee pour la reconnaissance d'actions, ordre-invariante),
+# on extrait les features a 3 profondeurs differentes :
+#   - Bloc 3 (early)  : mouvement local, bords, textures
+#   - Bloc 7 (mid)    : parties d'objets, relations spatiales
+#   - Bloc 11 (final) : contexte semantique global
+#
+# Ces 3 echelles sont fusionnees (concat -> projection) puis passees dans un
+# transformeur temporel SANS positional encodings : le modele doit deduire
+# l'ordre temporel du CONTENU des frames, pas de leur position dans la
+# sequence d'entree. Biais inductif correct pour la tache d'ordonnancement.
+#
+# Recette : identique a espagne (best a 49.71%) — 2frozen + LLRD 0.80.
+# Hypothese : features multi-echelle > feature finale seule -> meilleure
+# sensibilite a la direction du mouvement et fermeture du gap train/eval.
+defaults:
+  - override /model: videomae_multiscale
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 2
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 1024
+
+training:
+  epochs: 80
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

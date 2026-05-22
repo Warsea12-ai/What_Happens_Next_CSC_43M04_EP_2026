@@ -1,0 +1,8 @@
+name: videomae_multiscale
+num_classes: 33
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+num_frozen_blocks: 2
+n_temporal_layers: 2
+n_heads: 8
+dropout: 0.25
+head_hidden: 1024

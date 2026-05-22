@@ -45,6 +45,7 @@ from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from models.videomae_pair_attn import VideoMAEPairAttn
 from models.videomae_cross_attn_pairs import VideoMAECrossAttnPairs
+from models.videomae_multiscale import VideoMAEMultiScale
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -324,6 +325,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
         )
     if name == "videomae_cross_attn_pairs":
         return VideoMAECrossAttnPairs(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 2)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+        )
+    if name == "videomae_multiscale":
+        return VideoMAEMultiScale(
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 2)),

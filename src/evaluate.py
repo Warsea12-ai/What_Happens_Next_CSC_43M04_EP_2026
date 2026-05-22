@@ -33,6 +33,7 @@ _TRACK_B_MODELS = {
     "videomae_temporal_head", "videomae_domain_adapted",
     "videomae_pair_attn",
     "videomae_cross_attn_pairs",
+    "videomae_multiscale",
 }
 
 
