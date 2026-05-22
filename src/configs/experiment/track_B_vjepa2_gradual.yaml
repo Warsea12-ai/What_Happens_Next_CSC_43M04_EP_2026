@@ -1,0 +1,50 @@
+# @package _global_
+# VJEPA2Head — dégel progressif (soft thaw) + WD=0.05 + cosine
+#
+# Principe (architectures à 70%) :
+#   - Départ très gelé (38/40 blocs) → head seule + 2 blocs entraînables
+#   - Epoch 20 : dégel jusqu'à 32 (8 blocs trainables)
+#   - Epoch 40 : dégel jusqu'à 26 (14 blocs trainables)
+#   - Epoch 60 : dégel jusqu'à 20 (20 blocs trainables = moitié backbone)
+#   Chaque dégel reconstruit l'optimizer avec cosine restart.
+#
+# WD=0.05 (vs 5e-4 espagne) — forte régularisation L2 contre l'overfitting
+# à chaque étape de dégel, les nouveaux blocs démarrent avec leur LR backbone_lr_scale
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 38
+  dropout: 0.3
+  head_hidden: 2048
+
+training:
+  epochs: 100
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 15
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  # Progressive unfreezing: [epoch, n_frozen_blocks]
+  unfreeze_schedule:
+    - [20, 32]
+    - [40, 26]
+    - [60, 20]
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

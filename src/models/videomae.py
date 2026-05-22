@@ -85,6 +85,16 @@ class VideoMAEClassifier(nn.Module):
         n_train  = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"VideoMAEClassifier: {n_frozen/1e6:.1f}M frozen, {n_train/1e6:.1f}M trainable")
 
+    def unfreeze_to(self, n_frozen: int) -> None:
+        """Reduce frozen encoder blocks to n_frozen; call before rebuilding optimizer."""
+        for i, block in enumerate(self.model.videomae.encoder.layer):
+            for p in block.parameters():
+                p.requires_grad = (i >= n_frozen)
+        n_f = sum(p.numel() for p in self.parameters() if not p.requires_grad)
+        n_t = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"  VideoMAEClassifier thawed → {n_frozen} frozen blocks "
+              f"({n_f/1e6:.1f}M frozen, {n_t/1e6:.1f}M trainable)")
+
     def backbone_parameters(self):
         return [p for n, p in self.named_parameters()
                 if "classifier" not in n and p.requires_grad]

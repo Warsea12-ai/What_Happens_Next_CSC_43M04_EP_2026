@@ -52,6 +52,9 @@ from models.videomae_large import VideoMAELarge
 from models.vjepa2_head import VJEPA2Head
 from utils import build_transforms, set_seed, split_train_val
 
+import os
+import wandb
+
 
 _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
 _IMAGENET_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
@@ -504,6 +507,13 @@ def evaluate_epoch(
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "What_Happens_Next_CSC_43M04_EP_2026"),
+        name=os.environ.get("WANDB_RUN_NAME"),
+        config=OmegaConf.to_container(cfg, resolve=True),
+        resume="allow",
+    )
+
     set_seed(int(cfg.dataset.seed))
 
     device_str = cfg.training.device
@@ -601,12 +611,30 @@ def main(cfg: DictConfig) -> None:
         print(f"  Gradient accumulation: {grad_accum_steps} steps "
               f"(effective batch size = {int(cfg.training.batch_size) * grad_accum_steps})")
 
+    # Gradual unfreezing schedule: list of [epoch, n_frozen_blocks] pairs
+    unfreeze_sched: List[Tuple[int, int]] = []
+    if cfg.training.get("unfreeze_schedule"):
+        unfreeze_sched = sorted(
+            [(int(p[0]), int(p[1])) for p in cfg.training.unfreeze_schedule],
+            key=lambda x: x[0],
+        )
+
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
     recent_save_accs: list = []
     epochs_since_save = 0
 
     for epoch in range(total_epochs):
+        # Apply gradual unfreezing at scheduled epochs
+        for sched_epoch, n_frozen in unfreeze_sched:
+            if epoch == sched_epoch and hasattr(model, "unfreeze_to"):
+                model.unfreeze_to(n_frozen)
+                optimizer = build_optimizer(model, cfg)
+                remaining = max(1, total_epochs - epoch)
+                scheduler = CosineAnnealingLR(optimizer, T_max=remaining, eta_min=min_lr)
+                print(f"  Epoch {epoch+1}: encoder thawed to {n_frozen} frozen blocks, optimizer rebuilt")
+                break
+
         current_lr = optimizer.param_groups[-1]["lr"]  # head LR
         train_loss, train_acc = train_one_epoch(
             model, train_loader, loss_fn, optimizer, device,
@@ -626,6 +654,14 @@ def main(cfg: DictConfig) -> None:
             f"val loss {val_loss:.4f} acc {val_acc:.4f} | "
             f"head_lr {current_lr:.2e}"
         )
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "head_lr": current_lr,
+        }, step=epoch + 1)
 
         if val_acc > best_val_accuracy:
             best_val_accuracy = val_acc
@@ -640,6 +676,7 @@ def main(cfg: DictConfig) -> None:
                 "config": OmegaConf.to_container(cfg, resolve=True),
             }, checkpoint_path)
             print(f"  Saved best model to {checkpoint_path} (val acc={val_acc:.4f})")
+            wandb.run.summary["best_val_acc"] = val_acc
             epochs_since_save = 0
             recent_save_accs.append(val_acc)
         else:
@@ -656,6 +693,7 @@ def main(cfg: DictConfig) -> None:
             break
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
+    wandb.finish()
 
 
 if __name__ == "__main__":

@@ -103,6 +103,16 @@ class VideoMAELarge(nn.Module):
                 block.train(mode)
         return self
 
+    def unfreeze_to(self, n_frozen: int) -> None:
+        self.num_frozen_blocks = n_frozen
+        for i, block in enumerate(self.encoder.encoder.layer):
+            for p in block.parameters():
+                p.requires_grad = (i >= n_frozen)
+        n_f = sum(p.numel() for p in self.parameters() if not p.requires_grad)
+        n_t = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"  VideoMAELarge thawed → {n_frozen} frozen blocks "
+              f"({n_f/1e6:.0f}M frozen, {n_t/1e6:.1f}M trainable)")
+
     def head_parameters(self):
         return list(self.head.parameters())
 

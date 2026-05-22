@@ -140,6 +140,8 @@ def main(cfg: DictConfig) -> None:
     correct_top1 = 0
     correct_top5 = 0
     total = 0
+    num_classes = int(cfg.model.num_classes) if hasattr(cfg, "model") else 33
+    conf_matrix = torch.zeros(num_classes, num_classes, dtype=torch.long)
 
     with torch.no_grad():
         for video_batch, labels in val_loader:
@@ -169,12 +171,49 @@ def main(cfg: DictConfig) -> None:
 
             total += labels.size(0)
 
+            # Accumulate confusion matrix (CPU)
+            preds_cpu  = predictions_top1.cpu()
+            labels_cpu = labels.cpu()
+            for p, l in zip(preds_cpu, labels_cpu):
+                conf_matrix[l.item(), p.item()] += 1
+
     top1_accuracy = correct_top1 / max(total, 1)
     top5_accuracy = correct_top5 / max(total, 1)
 
     print(f"Validation samples: {len(val_dataset)}")
     print(f"Top-1 accuracy: {top1_accuracy:.4f}")
     print(f"Top-5 accuracy: {top5_accuracy:.4f}")
+
+    # ── Per-class accuracy ────────────────────────────────────────────────────
+    per_class_correct = conf_matrix.diagonal()
+    per_class_total   = conf_matrix.sum(dim=1)
+    per_class_acc = per_class_correct.float() / per_class_total.float().clamp(min=1)
+    print("\nPer-class top-1 accuracy:")
+    for cls_idx in range(num_classes):
+        bar = "#" * int(per_class_acc[cls_idx].item() * 20)
+        print(f"  {cls_idx:2d}: {per_class_acc[cls_idx]:.3f} [{bar:<20}]"
+              f"  ({per_class_correct[cls_idx]}/{per_class_total[cls_idx]})")
+
+    # ── Most confused pairs ───────────────────────────────────────────────────
+    conf_offdiag = conf_matrix.clone()
+    conf_offdiag.fill_diagonal_(0)
+    flat = conf_offdiag.view(-1)
+    top_k = min(10, (flat > 0).sum().item())
+    if top_k > 0:
+        top_vals, top_idx = flat.topk(top_k)
+        print("\nTop confused pairs (true → predicted: count):")
+        for val, idx in zip(top_vals.tolist(), top_idx.tolist()):
+            true_cls = idx // num_classes
+            pred_cls = idx % num_classes
+            print(f"  {true_cls:2d} → {pred_cls:2d}: {val}")
+
+    # ── Save confusion matrix ─────────────────────────────────────────────────
+    import numpy as np
+    cm_path = checkpoint_path.with_suffix("").with_name(
+        checkpoint_path.stem + "_confusion_matrix.npy"
+    )
+    np.save(cm_path, conf_matrix.numpy())
+    print(f"\nConfusion matrix saved → {cm_path}")
 
 
 if __name__ == "__main__":
