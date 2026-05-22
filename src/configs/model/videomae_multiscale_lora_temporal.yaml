@@ -1,0 +1,12 @@
+name: videomae_multiscale_lora_temporal
+num_classes: 33
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+n_temporal_layers: 3
+n_heads: 8
+dropout: 0.3
+head_hidden: 1024
+lora_rank: 8
+lora_alpha: 16.0
+# Indices dans hidden_states (embed=0, block_k=k+1). Pour VideoMAE-base (12 blocs)
+# on prend [6, 9, 12] = blocs 5/8/11 (mid-early, mid-late, final).
+scale_indices: [6, 9, 12]

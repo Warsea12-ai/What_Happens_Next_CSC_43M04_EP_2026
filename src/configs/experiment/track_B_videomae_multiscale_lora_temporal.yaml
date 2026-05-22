@@ -1,0 +1,41 @@
+# @package _global_
+# VideoMAE-base SSv2 + multi-scale (blocs 5/8/11) + LoRA r=8 + temporal head 3L.
+# Hybride visant à dépasser track_B_videomae_ssv2_temporal_lora (top actuel 0.428%) :
+#   - multi-scale capture le mouvement local des couches intermédiaires
+#   - le temporal transformer + deltas du scale final captent la sémantique
+#   - LoRA permet d'adapter tout le backbone sans catastrophic forgetting SSv2
+defaults:
+  - override /model: videomae_multiscale_lora_temporal
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+  lora_rank: 8
+  lora_alpha: 16.0
+  scale_indices: [6, 9, 12]
+
+training:
+  epochs: 70
+  lr: 2.0e-4
+  backbone_lr_scale: 0.05
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 2.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.3

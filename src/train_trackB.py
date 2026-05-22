@@ -55,6 +55,7 @@ from models.internvit6b_temporal import InternViT6BTemporal
 from models.internvit6b_pairwise import InternViT6BPairwise
 from models.vjepa2_variants import VJEPA2Variant
 from models.internvideo2 import InternVideo2
+from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, set_seed, split_train_val
 
 import os
@@ -445,6 +446,18 @@ def build_model(cfg: DictConfig) -> nn.Module:
             proj_dim=int(cfg.model.get("proj_dim", 512)),
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.25)),
+        )
+    if name == "videomae_multiscale_lora_temporal":
+        return VideoMAEMultiScaleLoRATemporal(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            lora_rank=int(cfg.model.get("lora_rank", 8)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 16.0)),
+            scale_indices=tuple(cfg.model.get("scale_indices", (6, 9, 12))),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
