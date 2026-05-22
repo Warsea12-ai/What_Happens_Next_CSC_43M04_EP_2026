@@ -1,0 +1,50 @@
+# @package _global_
+# VideoMAECrossAttnPairs : cross-attention spatiale entre frames + recette espagne.
+#
+# Innovation : pour chaque paire (i,j), au lieu de calculer f_j - f_i (différence
+# de features poolées), on fait de la CROSS-ATTENTION SPATIALE : le résumé de
+# frame_j (query) attend aux 196 tokens de frame_i (keys/values). Cela capture
+# QUELLES régions spatiales de frame_i sont les plus pertinentes pour frame_j.
+#
+# Intuition : "la main s'est déplacée de la région X (frame_i) vers Y (frame_j)".
+# La cross-attention identifie la région X, tandis que la simple différence ne
+# capture que le changement moyen dans la scène.
+#
+# Recette : identique à espagne (best à date) — 2frozen + LLRD 0.80.
+# espagne (simple head) → 49.71% evaluate.py
+# pair_attn_2frozen (rich head) → en cours sur piranha
+# Hypothèse : cross-attn spatiale > différence globale → encore meilleur
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 2
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 1024
+
+training:
+  epochs: 80
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

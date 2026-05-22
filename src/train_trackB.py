@@ -44,6 +44,7 @@ from models.qwen_lora import QwenVLLoRA
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from models.videomae_pair_attn import VideoMAEPairAttn
+from models.videomae_cross_attn_pairs import VideoMAECrossAttnPairs
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -321,6 +322,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lora_rank=int(cfg.model.get("lora_rank", 16)),
             lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
         )
+    if name == "videomae_cross_attn_pairs":
+        return VideoMAECrossAttnPairs(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 2)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+        )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
 
@@ -542,6 +553,8 @@ def main(cfg: DictConfig) -> None:
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
+    recent_save_accs: list = []
+    epochs_since_save = 0
 
     for epoch in range(total_epochs):
         current_lr = optimizer.param_groups[-1]["lr"]  # head LR
@@ -577,6 +590,20 @@ def main(cfg: DictConfig) -> None:
                 "config": OmegaConf.to_container(cfg, resolve=True),
             }, checkpoint_path)
             print(f"  Saved best model to {checkpoint_path} (val acc={val_acc:.4f})")
+            epochs_since_save = 0
+            recent_save_accs.append(val_acc)
+        else:
+            epochs_since_save += 1
+
+        stop = False
+        if epochs_since_save >= 6:
+            print("  Early stop: no model saved in the last 6 epochs.")
+            stop = True
+        if len(recent_save_accs) >= 3 and recent_save_accs[-1] - recent_save_accs[-3] < 0.01:
+            print("  Early stop: val accuracy gain over last 3 saves < 1%.")
+            stop = True
+        if stop:
+            break
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
 
