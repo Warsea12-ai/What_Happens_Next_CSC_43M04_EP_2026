@@ -372,6 +372,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 512)),
+            backbone_dtype=str(cfg.model.get("backbone_dtype", "float32")),
         )
     if name == "videomae_large":
         return VideoMAELarge(

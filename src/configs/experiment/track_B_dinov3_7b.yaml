@@ -1,0 +1,44 @@
+# @package _global_
+# DINOv3-ViT-7B (6.7B, frozen) + temporal transformer.
+#
+# Stratégie : tester si scaler DinoV3 de 840M (H+) → 6.7B (vit-7b16) suffit
+# pour dépasser V-JEPA 2 vit-g (~1B, 70% Track B). Même architecture qu'en
+# track_B_dinov3_temporal — seul le backbone change.
+#
+# Mémoire : 6.7B en BF16 = 13.4 GB. Avec activations 224x224x4 frames et
+# batch_size=2, fit sur 24 GB ; batch effectif 64 via grad_accum=32.
+defaults:
+  - override /model: dinov3_temporal
+
+model:
+  backbone: "facebook/dinov3-vit7b16-pretrain-lvd1689m"
+  backbone_dtype: "bfloat16"        # OBLIGATOIRE : FP32 ferait 26.8 GB
+  proj_dim: 1024                    # hidden_size=4096 (vs 1280 pour H+) → on élargit
+  n_temporal_layers: 4
+  n_heads: 8
+  dropout: 0.3
+  head_hidden: 1024
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 2
+  grad_accum_steps: 32              # effectif = 64
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

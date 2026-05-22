@@ -51,14 +51,24 @@ class DINOv3Temporal(nn.Module):
         n_heads: int = 8,
         dropout: float = 0.25,
         head_hidden: int = 512,
+        backbone_dtype: str = "float32",
     ) -> None:
         super().__init__()
 
+        # Backbone loading dtype. BF16 essentiel pour les très gros backbones
+        # (7B = 26.8GB en FP32, 13.4GB en BF16) — sans ça, OOM sur 24GB.
+        # Le head (frame_proj, transformer, classifier) reste en FP32 ; on cast
+        # à la frontière dans forward().
+        _DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}
+        _bb_dtype = _DTYPES.get(backbone_dtype, torch.float32)
+
         # ── Frozen DINOv3-ViT-H backbone ──────────────────────────────────────
-        self.encoder = AutoModel.from_pretrained(backbone, use_safetensors=True)
+        self.encoder = AutoModel.from_pretrained(
+            backbone, use_safetensors=True, torch_dtype=_bb_dtype,
+        )
         for p in self.encoder.parameters():
             p.requires_grad = False
-        hidden = self.encoder.config.hidden_size  # 1280
+        hidden = self.encoder.config.hidden_size  # 1280 (H+), 4096 (7B)
 
         # ── Frame-level projection ─────────────────────────────────────────────
         # Project 1280-dim DINOv3 CLS to a compact temporal-transformer space
@@ -129,10 +139,12 @@ class DINOv3Temporal(nn.Module):
 
         # ── Per-frame DINOv3 encoding (frozen, no grad needed) ────────────────
         x_flat = x.reshape(B * T, C, H, W)  # (B*4, 3, 224, 224)
+        # Cast à la frontière : si le backbone est BF16 (cas 7B), l'input doit l'être
+        enc_dtype = next(self.encoder.parameters()).dtype
         # encoder.eval() is enforced in train(); no_grad skips graph construction
         # for the frozen part → memory and speed benefit
         with torch.no_grad():
-            enc_out = self.encoder(pixel_values=x_flat)
+            enc_out = self.encoder(pixel_values=x_flat.to(enc_dtype))
         # CLS token is index 0; indices 1..4 are register tokens (ignored)
         cls_tokens = enc_out.last_hidden_state[:, 0].to(dtype)  # (B*4, 1280)
         frame_feats = cls_tokens.reshape(B, T, -1)               # (B, 4, 1280)
