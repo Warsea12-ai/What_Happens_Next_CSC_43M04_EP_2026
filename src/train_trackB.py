@@ -54,6 +54,7 @@ from models.internvl2_classifier import InternVL2Classifier
 from models.internvit6b_temporal import InternViT6BTemporal
 from models.internvit6b_pairwise import InternViT6BPairwise
 from models.vjepa2_variants import VJEPA2Variant
+from models.internvideo2 import InternVideo2
 from utils import build_transforms, set_seed, split_train_val
 
 import os
@@ -389,6 +390,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 32)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
+        )
+    if name == "internvideo2":
+        return InternVideo2(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "OpenGVLab/InternVideo2-Stage2_6B")),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
         )
     if name == "internvl2_classifier":
         return InternVL2Classifier(

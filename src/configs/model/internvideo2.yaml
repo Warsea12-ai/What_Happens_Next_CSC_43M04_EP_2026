@@ -1,0 +1,6 @@
+name: internvideo2
+num_classes: 33
+backbone: "OpenGVLab/InternVideo2-Stage2_6B"
+backbone_dtype: "bfloat16"
+dropout: 0.3
+head_hidden: 2048

@@ -1,0 +1,40 @@
+# @package _global_
+# InternVideo2-Stage2-6B (OpenGVLab) — backbone vidéo natif 6B frozen + MLP head.
+#
+# Risque : modèle custom OpenGVLab, peut crash au load (trust_remote_code,
+# flash_attn manquant, API divergente). On itère si nécessaire.
+#
+# Mémoire : 6B en BF16 = 12 GB poids + activations ~3-4 GB pour T=4 @ 224.
+# Sur 24 GB GPU, batch_size=2 + grad_accum=32 (effectif 64).
+defaults:
+  - override /model: internvideo2
+
+model:
+  backbone: "OpenGVLab/InternVideo2-Stage2_6B"
+  backbone_dtype: "bfloat16"
+  dropout: 0.3
+  head_hidden: 2048
+
+training:
+  epochs: 60
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 2
+  grad_accum_steps: 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
