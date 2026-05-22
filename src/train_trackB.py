@@ -58,7 +58,17 @@ from models.internvideo2 import InternVideo2
 from utils import build_transforms, set_seed, split_train_val
 
 import os
-import wandb
+try:
+    import wandb
+    _WANDB_OK = True
+except Exception as _wandb_err:
+    print(f"[wandb] import failed ({_wandb_err}) — logging désactivé pour ce run")
+    _WANDB_OK = False
+    class _WandbStub:
+        run = type("R", (), {"summary": {}})()
+        def __getattr__(self, _name):
+            return lambda *a, **kw: None
+    wandb = _WandbStub()
 
 
 _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
