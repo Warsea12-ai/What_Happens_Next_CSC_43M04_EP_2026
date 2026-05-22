@@ -38,6 +38,7 @@ _TRACK_B_MODELS = {
     "dinov3_temporal",
     "videomae_large",
     "vjepa2_head",
+    "internvl2_classifier",
 }
 
 

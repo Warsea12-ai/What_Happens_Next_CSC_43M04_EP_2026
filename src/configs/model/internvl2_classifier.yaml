@@ -1,0 +1,7 @@
+name: internvl2_classifier
+num_classes: 33
+backbone: "OpenGVLab/InternVL2-8B"
+lora_rank: 16
+lora_alpha: 32.0
+dropout: 0.25
+num_frozen_llm_layers: 24

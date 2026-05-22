@@ -50,6 +50,7 @@ from models.videomae_pairwise_ranking import VideoMAEPairwiseRanking
 from models.dinov3_temporal import DINOv3Temporal
 from models.videomae_large import VideoMAELarge
 from models.vjepa2_head import VJEPA2Head
+from models.internvl2_classifier import InternVL2Classifier
 from utils import build_transforms, set_seed, split_train_val
 
 import os
@@ -385,6 +386,15 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
         )
+    if name == "internvl2_classifier":
+        return InternVL2Classifier(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "OpenGVLab/InternVL2-8B")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            num_frozen_llm_layers=int(cfg.model.get("num_frozen_llm_layers", 24)),
+        )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
 
@@ -623,8 +633,23 @@ def main(cfg: DictConfig) -> None:
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
     recent_save_accs: list = []
     epochs_since_save = 0
+    start_epoch = 0
 
-    for epoch in range(total_epochs):
+    if checkpoint_path.exists():
+        print(f"  Checkpoint trouvé : {checkpoint_path} — reprise de l'entraînement...")
+        _ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(_ckpt["model_state_dict"])
+        if "optimizer_state_dict" in _ckpt:
+            optimizer.load_state_dict(_ckpt["optimizer_state_dict"])
+        if _ckpt.get("scheduler_state_dict") is not None:
+            scheduler.load_state_dict(_ckpt["scheduler_state_dict"])
+        start_epoch       = _ckpt.get("epoch", 0)
+        best_val_accuracy = _ckpt.get("best_val_accuracy", _ckpt.get("val_accuracy", 0.0))
+        recent_save_accs  = _ckpt.get("recent_save_accs", [])
+        epochs_since_save = _ckpt.get("epochs_since_save", 0)
+        print(f"  Reprise depuis epoch {start_epoch}/{total_epochs} (best val acc={best_val_accuracy:.4f})")
+
+    for epoch in range(start_epoch, total_epochs):
         # Apply gradual unfreezing at scheduled epochs
         for sched_epoch, n_frozen in unfreeze_sched:
             if epoch == sched_epoch and hasattr(model, "unfreeze_to"):
@@ -665,20 +690,26 @@ def main(cfg: DictConfig) -> None:
 
         if val_acc > best_val_accuracy:
             best_val_accuracy = val_acc
-            torch.save({
-                "model_state_dict": model.state_dict(),
-                "model_name": cfg.model.name,
-                "num_classes": num_classes,
-                "pretrained": bool(cfg.model.get("pretrained", True)),
-                "use_imagenet_norm": True,  # always True in this script — used by evaluate.py
-                "num_frames": int(cfg.dataset.num_frames),
-                "val_accuracy": val_acc,
-                "config": OmegaConf.to_container(cfg, resolve=True),
-            }, checkpoint_path)
-            print(f"  Saved best model to {checkpoint_path} (val acc={val_acc:.4f})")
-            wandb.run.summary["best_val_acc"] = val_acc
-            epochs_since_save = 0
             recent_save_accs.append(val_acc)
+            epochs_since_save = 0
+            torch.save({
+                "model_state_dict":     model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "epoch":                epoch + 1,
+                "best_val_accuracy":    best_val_accuracy,
+                "recent_save_accs":     recent_save_accs,
+                "epochs_since_save":    0,
+                "model_name":           cfg.model.name,
+                "num_classes":          num_classes,
+                "pretrained":           bool(cfg.model.get("pretrained", True)),
+                "use_imagenet_norm":    True,
+                "num_frames":           int(cfg.dataset.num_frames),
+                "val_accuracy":         val_acc,
+                "config":               OmegaConf.to_container(cfg, resolve=True),
+            }, checkpoint_path)
+            print(f"  Saved best model to {checkpoint_path} (epoch={epoch + 1}, val acc={val_acc:.4f})")
+            wandb.run.summary["best_val_acc"] = val_acc
         else:
             epochs_since_save += 1
 
