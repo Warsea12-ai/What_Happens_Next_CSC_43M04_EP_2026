@@ -35,6 +35,8 @@ _TRACK_B_MODELS = {
     "videomae_cross_attn_pairs",
     "videomae_multiscale",
     "videomae_pairwise_ranking",
+    "dinov3_temporal",
+    "videomae_large",
 }
 
 

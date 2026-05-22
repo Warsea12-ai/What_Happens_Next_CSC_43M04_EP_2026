@@ -1,0 +1,47 @@
+# @package _global_
+# VideoMAELarge : VideoMAE-Large-Kinetics (307M) + espagne recipe
+#
+# Motivation : VideoMAE-Large est 3.5x plus grand que VideoMAE-Base :
+# - 24 blocs (vs 12), 1024-dim (vs 768), 307M params (vs 86M)
+# - Pré-entraîné sur Kinetics (700 classes d'actions) → représentations vidéo riches
+#
+# Recipe : même que espagne mais adapté à Large :
+# - num_frozen_blocks=4 (≈ même fraction relative que 2/12)
+# - LLRD 0.80 sur 20 blocs entraînables
+# - head_hidden=2048 (vs 1024 pour Base)
+# - batch_size=4 + grad_accum=16 → batch effectif 64 (mémoire limitée)
+# - lr=5e-5 (plus conservateur pour le plus grand modèle)
+#
+# Config spécifique murene (seul hôte avec videomae-large en cache).
+defaults:
+  - override /model: videomae_large
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+  num_frozen_blocks: 4
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 80
+  lr: 5.0e-5
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

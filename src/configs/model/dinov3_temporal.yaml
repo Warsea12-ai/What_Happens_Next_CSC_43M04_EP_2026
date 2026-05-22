@@ -1,0 +1,8 @@
+name: dinov3_temporal
+num_classes: 33
+backbone: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+proj_dim: 512
+n_temporal_layers: 4
+n_heads: 8
+dropout: 0.25
+head_hidden: 512

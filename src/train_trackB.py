@@ -47,6 +47,8 @@ from models.videomae_pair_attn import VideoMAEPairAttn
 from models.videomae_cross_attn_pairs import VideoMAECrossAttnPairs
 from models.videomae_multiscale import VideoMAEMultiScale
 from models.videomae_pairwise_ranking import VideoMAEPairwiseRanking
+from models.dinov3_temporal import DINOv3Temporal
+from models.videomae_large import VideoMAELarge
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -352,6 +354,24 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
             rank_hidden=int(cfg.model.get("rank_hidden", 64)),
+        )
+    if name == "dinov3_temporal":
+        return DINOv3Temporal(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/dinov3-vith16plus-pretrain-lvd1689m")),
+            proj_dim=int(cfg.model.get("proj_dim", 512)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 4)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+        )
+    if name == "videomae_large":
+        return VideoMAELarge(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 4)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

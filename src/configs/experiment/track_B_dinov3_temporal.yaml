@@ -1,0 +1,54 @@
+# @package _global_
+# DINOv3Temporal : DINOv3-ViT-H (632M, frozen) + temporal transformer (15M trainable)
+#
+# Stratégie pour dépasser 60% sur evaluate.py :
+# Le problème central est le gap train/eval (~15pp) dû à l'overfit du backbone.
+# Solution : backbone ENTIÈREMENT GELÉ → overfit quasi nul → gap <5pp.
+#
+# DINOv3-ViT-H est entraîné sur 1.7B images (LVD-1689M) et produit des features
+# sémantiques 1280-dim d'une richesse exceptionnelle par frame.
+# Le transformer temporel (4 couches, 512-dim) apprend les patterns d'ordre
+# entre ces features riches sans jamais modifier le backbone.
+#
+# Propriété clé : si le transformer temporel ne contribue pas → embeddings riches
+# DINOv3 restent utiles même seuls. Le gap minimal garantit que
+# val_acc(training) ≈ val_acc(evaluate.py) = performance réelle.
+#
+# Config spécifique piranha (seul hôte avec dinov3 en cache) :
+# - LR élevé (5e-4) car seul le head train
+# - batch_size 16 (backbone frozen = mémoire économisée)
+# - grad_accum 4 → batch effectif = 64
+defaults:
+  - override /model: dinov3_temporal
+
+model:
+  backbone: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+  proj_dim: 512
+  n_temporal_layers: 4
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 512
+
+training:
+  epochs: 80
+  lr: 5.0e-4
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
