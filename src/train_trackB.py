@@ -49,6 +49,7 @@ from models.videomae_multiscale import VideoMAEMultiScale
 from models.videomae_pairwise_ranking import VideoMAEPairwiseRanking
 from models.dinov3_temporal import DINOv3Temporal
 from models.videomae_large import VideoMAELarge
+from models.vjepa2_head import VJEPA2Head
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -370,6 +371,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-large-finetuned-kinetics")),
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 4)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+        )
+    if name == "vjepa2_head":
+        return VJEPA2Head(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitg-fpc64-384-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 32)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
         )

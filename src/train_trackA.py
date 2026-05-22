@@ -469,6 +469,8 @@ def main(cfg: DictConfig) -> None:
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
+    recent_save_accs: list = []
+    epochs_since_save = 0
 
     for epoch in range(total_epochs):
         current_lr = optimizer.param_groups[0]["lr"]
@@ -504,6 +506,20 @@ def main(cfg: DictConfig) -> None:
             }
             torch.save(payload, checkpoint_path)
             print(f"  Saved best model to {checkpoint_path} (val acc={val_acc:.4f})")
+            epochs_since_save = 0
+            recent_save_accs.append(val_acc)
+        else:
+            epochs_since_save += 1
+
+        stop = False
+        if epochs_since_save >= 6:
+            print("  Early stop: no model saved in the last 6 epochs.")
+            stop = True
+        if len(recent_save_accs) >= 3 and recent_save_accs[-1] - recent_save_accs[-3] < 0.01:
+            print("  Early stop: val accuracy gain over last 3 saves < 1%.")
+            stop = True
+        if stop:
+            break
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
 

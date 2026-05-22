@@ -1,0 +1,6 @@
+name: vjepa2_head
+num_classes: 33
+backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+num_frozen_blocks: 32
+dropout: 0.25
+head_hidden: 2048

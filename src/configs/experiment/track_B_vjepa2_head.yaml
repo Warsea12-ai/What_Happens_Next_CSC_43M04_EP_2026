@@ -1,0 +1,53 @@
+# @package _global_
+# VJEPA2Head : V-JEPA 2 ViT-G (1012M, SSv2-finetuned) + espagne MLP head
+#
+# Modèle le plus grand et le plus pertinent pour le domaine :
+# - 12x plus grand que VideoMAE-Base-SSv2
+# - Pré-entraîné sur SSv2 (domaine exact = même dataset que notre tâche)
+# - Codage positionnel dynamique : aucun mismatch de poids à 224px/16 frames
+# - 1012M paramètres d'encodeur chargés parfaitement depuis le cache SSv2
+#
+# Stratégie fine-tuning (espagne analogy adapté à 40 blocs) :
+# - Geler 32/40 blocs (= 80% gelés vs 2/12=17% pour espagne)
+# - Raison : 202M params entraînables (proche de 77M de espagne en % du total)
+# - LLRD 0.80 sur les 8 blocs entraînables
+# - torch.no_grad() sur les 32 blocs gelés → économise ~5.5 GB de mémoire GPU
+#
+# Résultat du test GPU (raie, batch=4) :
+# - Pic GPU : 8.67 GB (raie a 24 GB → marge confortable)
+# - Forme feature : (4, 1408) ✓ backward OK ✓
+#
+# Cache : /Data/vianney.gauthier/hub (partagé NFS, accessible depuis tous les hôtes)
+# Hôte recommandé : raie (24 GB GPU libre)
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 80
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 10
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
