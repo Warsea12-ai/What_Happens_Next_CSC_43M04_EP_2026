@@ -34,6 +34,7 @@ _TRACK_B_MODELS = {
     "videomae_pair_attn",
     "videomae_cross_attn_pairs",
     "videomae_multiscale",
+    "videomae_pairwise_ranking",
 }
 
 

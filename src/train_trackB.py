@@ -46,6 +46,7 @@ from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from models.videomae_pair_attn import VideoMAEPairAttn
 from models.videomae_cross_attn_pairs import VideoMAECrossAttnPairs
 from models.videomae_multiscale import VideoMAEMultiScale
+from models.videomae_pairwise_ranking import VideoMAEPairwiseRanking
 from utils import build_transforms, set_seed, split_train_val
 
 
@@ -342,6 +343,15 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
+        )
+    if name == "videomae_pairwise_ranking":
+        return VideoMAEPairwiseRanking(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "MCG-NJU/videomae-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 2)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            rank_hidden=int(cfg.model.get("rank_hidden", 64)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

@@ -1,0 +1,7 @@
+name: videomae_pairwise_ranking
+num_classes: 33
+backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+num_frozen_blocks: 2
+dropout: 0.25
+head_hidden: 1024
+rank_hidden: 64
