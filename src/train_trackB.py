@@ -14,6 +14,26 @@ Run from src/::
 
 from __future__ import annotations
 
+# ── Global flash_attn availability workaround ────────────────────────────────
+# Several trust_remote_code models in this repo (InternVL2.5, InternVideo2,
+# Qwen2.5-VL, …) instantiate Qwen2ForCausalLM directly, triggering
+# transformers' attention auto-detection. On shared hosts where flash_attn
+# is half-installed (transitive ms-swift artefact), find_spec("flash_attn")
+# raises ValueError: flash_attn.__spec__ is None instead of returning None.
+# Patch find_spec to report flash_attn as missing; transformers then falls
+# back to sdpa/eager cleanly. Must run BEFORE any model.from_pretrained.
+import importlib.util as _il_util
+if not getattr(_il_util, "_trk_flash_attn_patched", False):
+    _ORIG_FIND_SPEC = _il_util.find_spec
+
+    def _patched_find_spec(name, *args, **kwargs):
+        if name == "flash_attn":
+            return None
+        return _ORIG_FIND_SPEC(name, *args, **kwargs)
+
+    _il_util.find_spec = _patched_find_spec
+    _il_util._trk_flash_attn_patched = True
+
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple

@@ -20,13 +20,16 @@ training:
   lr: 5.0e-4
   backbone_lr_scale: 0.0
   llrd_factor: 0.0
-  batch_size: 2
-  grad_accum_steps: 32
+  # 6B at bf16 ~12 GB just for weights; on RTX A4000 16GB (140W) we have
+  # ~4 GB for activations — batch=1 is the only safe choice. Was batch=2.
+  batch_size: 1
+  grad_accum_steps: 64       # was 32 — double to keep effective batch=64
   weight_decay: 5.0e-4
-  label_smoothing: 0.1
+  label_smoothing: 0.05      # lower per wandb correlation analysis (rho=-0.43)
   warmup_epochs: 5
   min_lr: 1.0e-7
   clip_grad_norm: 1.0
+  wandb_watch: false         # disable grad-mirror hook (saves ~1GB on 6B frozen backbone)
 
   use_random_resized_crop: true
   use_augment: true

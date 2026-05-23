@@ -56,5 +56,6 @@ training:
   flip_prob: 0.5
   use_temporal_map: true
   equivariant_reverse_prob: 0.6
+  wandb_watch: false         # disable grad-mirror hook (saves ~1GB on 6B frozen backbone)
 
   num_workers: 4

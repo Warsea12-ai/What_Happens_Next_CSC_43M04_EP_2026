@@ -24,13 +24,17 @@ model:
 training:
   epochs: 60
   lr: 5.0e-4
-  batch_size: 32
-  grad_accum_steps: 2
+  # Was batch=32/accum=2 (effective 64) — OOM'd on 16GB Tesla T4 (diuris).
+  # Quartered batch & quadrupled accum → keeps effective batch=64 but fits
+  # comfortably on RTX A4000 16GB (140W bucket).
+  batch_size: 8
+  grad_accum_steps: 8
   weight_decay: 1.0e-4
-  label_smoothing: 0.1
+  label_smoothing: 0.05      # lower per wandb correlation analysis (rho=-0.43)
   warmup_epochs: 5
   min_lr: 1.0e-6
   clip_grad_norm: 1.0
+  wandb_watch: false         # disable grad-mirror hook (saves ~500MB on 665M frozen backbone)
 
   use_random_resized_crop: false
   use_augment: true
