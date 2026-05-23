@@ -106,27 +106,45 @@ class LlavaMistralVideo(nn.Module):
         )
 
         # ── Extract the three components defensively ─────────────────────────
-        self.vision_tower = _grab(full, ["vision_tower", "vision_model", "visual"])
+        # transformers 5.x layout: components are nested inside `full.model`
+        # (LlavaNextVideoModel), with `full.lm_head` at the top level. Older
+        # transformers exposed everything at the top level. We try `.model` first.
+        host = _grab(full, ["model"]) or full
+
+        # In LLaVA-NeXT-Video-7B the LLM is actually Llama (Vicuna-7B), not
+        # Mistral — the file name is kept for backward compatibility, but the
+        # checkpoint is a 32-layer Llama-2-7B-style decoder.
+        self.vision_tower = _grab(host, ["vision_tower", "vision_model", "visual"])
         if self.vision_tower is None:
-            raise RuntimeError("Could not locate vision_tower in LlavaNextVideo model.")
+            raise RuntimeError(
+                f"Could not locate vision_tower; host children: "
+                f"{[n for n, _ in host.named_children()]}"
+            )
 
         self.multi_modal_projector = _grab(
-            full, ["multi_modal_projector", "mm_projector", "vision_resampler",
-                   "projector"],
+            host, ["multi_modal_projector", "mm_projector", "projector"],
         )
         if self.multi_modal_projector is None:
-            raise RuntimeError("Could not locate multi_modal_projector in LlavaNextVideo model.")
+            raise RuntimeError("Could not locate multi_modal_projector.")
 
-        # The language model is a MistralForCausalLM-like wrapper. We want its
-        # *transformer* (returns hidden states), not the lm_head.
-        lm = _grab(full, ["language_model"])
+        # Pool used by LLaVA-NeXT-Video to downsample frame tokens spatially
+        # (AvgPool2d stride=2). Keep frozen — it's part of the pretrained
+        # vision→LLM pipeline and required to match the projector's expected
+        # token count when feeding video frames.
+        self.vision_resampler = _grab(host, ["vision_resampler"])  # may be None for image-only LLaVA
+
+        lm = _grab(host, ["language_model"])
         if lm is None:
-            raise RuntimeError("Could not locate language_model in LlavaNextVideo model.")
-        # MistralForCausalLM exposes the bare transformer as `.model`. If not,
-        # fall back to the LM wrapper itself (its forward returns logits we'd
-        # have to ignore — but output_hidden_states still works).
+            raise RuntimeError("Could not locate language_model.")
+        # In transformers 5.x, `host.language_model` is ALREADY the bare
+        # transformer (LlamaModel) — its forward returns hidden states directly.
+        # In older transformers it was a *ForCausalLM wrapper; we still drill
+        # into `.model` if that's what we got.
         inner = getattr(lm, "model", None)
-        self.language_model = inner if isinstance(inner, nn.Module) else lm
+        if isinstance(inner, nn.Module) and any(n == "layers" for n, _ in inner.named_children()):
+            self.language_model = inner
+        else:
+            self.language_model = lm
 
         # Free the wrapper (we only kept submodules)
         del full
@@ -141,6 +159,10 @@ class LlavaMistralVideo(nn.Module):
             p.requires_grad = False
         self.vision_tower.eval()
         self.multi_modal_projector.eval()
+        if self.vision_resampler is not None:
+            for p in self.vision_resampler.parameters():
+                p.requires_grad = False
+            self.vision_resampler.eval()
 
         # ── Apply LoRA to the Mistral transformer ────────────────────────────
         lora_cfg = LoraConfig(
@@ -212,6 +234,8 @@ class LlavaMistralVideo(nn.Module):
         # Keep frozen submodules in eval no matter what
         self.vision_tower.eval()
         self.multi_modal_projector.eval()
+        if self.vision_resampler is not None:
+            self.vision_resampler.eval()
         return self
 
     def head_parameters(self):
@@ -245,6 +269,31 @@ class LlavaMistralVideo(nn.Module):
             feats = feats[:, 1:]
         return feats
 
+    @torch.no_grad()
+    def _resample_video_tokens(self, vis_feats: torch.Tensor) -> torch.Tensor:
+        """Apply LLaVA-NeXT-Video's spatial pool (AvgPool2d stride=2) to frame tokens.
+
+        This mirrors the pretrained video pipeline: 24×24 = 576 patches per frame
+        get pooled to 12×12 = 144 patches. The LLM saw 144 tokens/frame during
+        pretraining, so feeding it 576 would be off-distribution.
+
+        Input  : (B*T, P, D_vis) where P is a perfect square (e.g. 576).
+        Output : (B*T, P_new, D_vis) where P_new = (sqrt(P) // stride) ** 2.
+        Returns the input unchanged if no resampler is present or shapes don't fit.
+        """
+        if self.vision_resampler is None:
+            return vis_feats
+        N, P, D = vis_feats.shape
+        side = int(P ** 0.5)
+        if side * side != P:
+            return vis_feats
+        # (N, P, D) → (N, D, side, side) for 2D pool
+        x_2d = vis_feats.transpose(1, 2).reshape(N, D, side, side)
+        # The resampler is LlavaNextVideoPooler wrapping AvgPool2d in .pool
+        pool = getattr(self.vision_resampler, "pool", self.vision_resampler)
+        x_pooled = pool(x_2d)                                   # (N, D, side', side')
+        return x_pooled.flatten(2).transpose(1, 2).contiguous()  # (N, side'^2, D)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, T=4, C=3, H, W) — ImageNet-normalised
         B, T, C, H, W = x.shape
@@ -260,11 +309,14 @@ class LlavaMistralVideo(nn.Module):
 
         # Vision encoding in bf16 under no_grad (vision tower is frozen).
         x_bf16 = x.view(B * T, C, _CLIP_IMAGE_SIZE, _CLIP_IMAGE_SIZE).to(torch.bfloat16)
-        vis_feats = self._encode_frames(x_bf16)                 # (B*T, P, Dv)
+        vis_feats = self._encode_frames(x_bf16)                 # (B*T, P=576, Dv)
+
+        # Spatial pool 24×24 → 12×12 to match LLaVA's video pretraining distribution.
+        vis_feats = self._resample_video_tokens(vis_feats)      # (B*T, P=144, Dv)
         P = vis_feats.shape[1]
 
         # Multi-modal projector: frozen, but we still need gradient *through* it
-        # because the [TASK_CLS] token and LoRA gradients flow through Mistral
+        # because the [TASK_CLS] token and LoRA gradients flow through Llama
         # which reads the projector's outputs. Projector weights have
         # requires_grad=False so no gradient is *stored* on them.
         proj_tokens = self.multi_modal_projector(vis_feats)     # (B*T, P, D_llm)
