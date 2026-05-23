@@ -22,11 +22,13 @@ defaults:
   - override /model: internvideo2_pairs
 
 model:
-  backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p"
+  # Stage2 1B variant is gated on HF (401); Stage2_6B is public — use frozen body
+  # + LoRA so a 12 GB-weight backbone still fits on a 20 GB power130 GPU.
+  backbone: "OpenGVLab/InternVideo2-Stage2_6B"
   backbone_dtype: "bfloat16"
-  use_lora: true
-  lora_rank: 16
-  lora_alpha: 32.0
+  use_lora: false           # LoRA on 6B trust_remote_code is unreliable; full freeze is safer here
+  lora_rank: 0
+  lora_alpha: 0.0
   perceiver_heads: 8
   n_temporal_layers: 3
   n_heads: 8
@@ -35,15 +37,11 @@ model:
 
 training:
   epochs: 60
-  # LR groups (build_optimizer in train_trackB):
-  #   head     → 1.0 e-4
-  #   LoRA     → 1.0 e-4 * backbone_lr_scale = 5.0 e-6
-  #   (no full-backbone group — encoder is frozen apart from LoRA)
   lr: 1.0e-4
   backbone_lr_scale: 0.05
-  llrd_factor: 0.0          # disabled: backbone is frozen, no per-layer decay needed
-  batch_size: 4
-  grad_accum_steps: 8       # effective batch size = 32
+  llrd_factor: 0.0          # disabled: backbone is frozen
+  batch_size: 1             # 6B at bf16 ~12 GB weights leaves <8 GB for activations
+  grad_accum_steps: 32      # effective batch size = 32
   weight_decay: 5.0e-4
   label_smoothing: 0.1
   warmup_epochs: 8
