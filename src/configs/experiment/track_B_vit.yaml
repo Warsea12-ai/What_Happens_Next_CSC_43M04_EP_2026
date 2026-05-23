@@ -13,7 +13,9 @@ model:
   temporal_heads: 8
 
 training:
-  epochs: 50
+  epochs: 150              # extension après early-stop @ ~30 epochs sur barlia (val 0.5554)
+  early_stop_patience: 20  # 6 → 20 : laisse plus de chances de sortir d'un plateau
+  early_stop_min_gain: 0.005  # 0.01 → 0.005 : tolère un progrès plus lent
   lr: 1.0e-4             # head LR (temporal transformer)
   backbone_lr_scale: 0.1 # last-6-block LR = 1e-5
   batch_size: 16          # ViT-B + 4 frames needs ~12GB; reduce if OOM

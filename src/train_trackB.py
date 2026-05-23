@@ -858,11 +858,16 @@ def main(cfg: DictConfig) -> None:
             epochs_since_save += 1
 
         stop = False
-        if epochs_since_save >= 6:
-            print("  Early stop: no model saved in the last 6 epochs.")
+        _es_patience = int(cfg.training.get("early_stop_patience", 6))
+        _es_min_gain = float(cfg.training.get("early_stop_min_gain", 0.01))
+        _es_disabled = _es_patience <= 0
+        if not _es_disabled and epochs_since_save >= _es_patience:
+            print(f"  Early stop: no model saved in the last {_es_patience} epochs.")
             stop = True
-        if len(recent_save_accs) >= 3 and recent_save_accs[-1] - recent_save_accs[-3] < 0.01:
-            print("  Early stop: val accuracy gain over last 3 saves < 1%.")
+        if (not _es_disabled
+                and len(recent_save_accs) >= 3
+                and recent_save_accs[-1] - recent_save_accs[-3] < _es_min_gain):
+            print(f"  Early stop: val accuracy gain over last 3 saves < {_es_min_gain:.0%}.")
             stop = True
         if stop:
             break
