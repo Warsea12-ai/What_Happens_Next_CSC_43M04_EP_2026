@@ -64,7 +64,7 @@ _VJEPA_HIDDEN        = 1408        # ViT-G width
 _VJEPA_SPATIAL_SIDE  = 14          # 224 / 16 patch size = 14
 _VJEPA_TEMPORAL      = 8           # 16 frames / 2-frame tubelet = 8
 _DEFAULT_VJEPA_CKPT  = "facebook/vjepa2-vitg-fpc64-384-ssv2"
-_DEFAULT_LLAMA_CKPT  = "meta-llama/Llama-3.1-8B-Instruct"
+_DEFAULT_LLAMA_CKPT  = "NousResearch/Meta-Llama-3.1-8B-Instruct"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

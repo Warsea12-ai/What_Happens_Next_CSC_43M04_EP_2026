@@ -2,7 +2,10 @@ name: vjepa2_llama3_vlm
 num_classes: 33
 
 vjepa_backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
-llama_backbone: "meta-llama/Llama-3.1-8B-Instruct"
+# Mirror non-gated des poids officiels Llama-3.1-8B-Instruct (mêmes shards exactement).
+# Évite la dépendance à une approbation Meta côté HF — utile pour les runs sur des
+# hôtes partagés où le token HF n'a pas encore l'accès au repo officiel.
+llama_backbone: "NousResearch/Meta-Llama-3.1-8B-Instruct"
 
 # 40/40 = V-JEPA encoder fully frozen — LoRA on LLaMA + projector + head
 # carry the task adaptation. Set < 40 to thaw the last few V-JEPA blocks too
