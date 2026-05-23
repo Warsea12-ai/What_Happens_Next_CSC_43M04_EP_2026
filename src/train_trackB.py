@@ -61,6 +61,14 @@ from models.vjepa2_llama3_vlm import VJEPA2Llama3VLM
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    # Defensive fallback: tqdm is in transformers' deps so this should never trigger,
+    # but if it does the loop still runs (silent, no bar).
+    def tqdm(iterable=None, **kwargs):
+        return iterable if iterable is not None else iter([])
+
 import os
 import time
 try:
@@ -566,7 +574,11 @@ def train_one_epoch(
     n_batches = len(data_loader)
 
     optimizer.zero_grad()
-    for step, (video_batch, labels) in enumerate(data_loader):
+    pbar = tqdm(
+        enumerate(data_loader), total=n_batches, desc="train", unit="batch",
+        dynamic_ncols=True, mininterval=2.0,
+    )
+    for step, (video_batch, labels) in pbar:
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
 
@@ -601,6 +613,10 @@ def train_one_epoch(
         running_loss += float(loss.item()) * grad_accum_steps * labels.size(0)
         correct += int((logits.argmax(dim=1) == labels).sum().item())
         total += labels.size(0)
+        # Live running averages on the bar (avoids a postfix re-format on every step)
+        if total > 0 and (step + 1) % max(1, n_batches // 20) == 0:
+            pbar.set_postfix(loss=f"{running_loss / total:.3f}",
+                             acc=f"{correct / total:.3f}", refresh=False)
 
     avg_loss = running_loss / max(total, 1)
     acc = correct / max(total, 1)
@@ -616,7 +632,9 @@ def evaluate_epoch(
 ) -> Tuple[float, float]:
     model.eval()
     running_loss, correct, total = 0.0, 0, 0
-    for video_batch, labels in data_loader:
+    pbar = tqdm(data_loader, total=len(data_loader), desc="val",
+                unit="batch", dynamic_ncols=True, mininterval=2.0)
+    for video_batch, labels in pbar:
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
         logits = model(video_batch)
