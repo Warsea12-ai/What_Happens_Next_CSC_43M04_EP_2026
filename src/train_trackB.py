@@ -332,6 +332,18 @@ def video_augment(
 # ── model factory ─────────────────────────────────────────────────────────────
 
 def build_model(cfg: DictConfig) -> nn.Module:
+    # Re-install the transformers compat shim *here*, not just at module load
+    # time. One of the `from models.* import …` lines above silently re-loads
+    # transformers.tokenization_utils (likely a tokenizer dependency in some
+    # other model wrapper) which wipes our monkey-patched _is_control etc.
+    # Running the shim again right before any from_pretrained call ensures the
+    # patched attributes are present when trust_remote_code modeling files
+    # like OpenGVLab/InternVideo2-Stage2_6B execute their imports.
+    try:
+        _install_transformers_compat_shim()
+    except Exception as _e:
+        print(f"[shim] re-install at build_model failed: {_e}")
+
     name = cfg.model.name
     if name == "cnn_temporal":
         return CNNTemporal(
