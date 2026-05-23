@@ -39,11 +39,35 @@ Input  : (B, T=4, C=3, H, W)  ImageNet-normalised (matches dataloader)
 from __future__ import annotations
 
 import gc
+import importlib.util as _il_util
 from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+
+# ── flash_attn availability workaround ────────────────────────────────────────
+# On shared hosts where flash_attn is half-installed (a transitive ms-swift
+# dependency that didn't finish building), `importlib.util.find_spec("flash_attn")`
+# raises `ValueError: flash_attn.__spec__ is None` instead of returning None.
+# transformers 5.x calls find_spec unconditionally inside its attention-
+# implementation auto-detection, so the inner Qwen2ForCausalLM init crashes
+# BEFORE our `attn_implementation="eager"` ever gets consulted.
+#
+# We patch find_spec to return None for "flash_attn" globally — telling
+# transformers it isn't available, which makes it fall back to sdpa/eager
+# cleanly. The patch is idempotent and only touches the one symbol.
+if not getattr(_il_util, "_intvl_flash_attn_patched", False):
+    _ORIG_FIND_SPEC = _il_util.find_spec
+
+    def _patched_find_spec(name, *args, **kwargs):
+        if name == "flash_attn":
+            return None
+        return _ORIG_FIND_SPEC(name, *args, **kwargs)
+
+    _il_util.find_spec = _patched_find_spec
+    _il_util._intvl_flash_attn_patched = True
 
 _DEFAULT_BACKBONE   = "OpenGVLab/InternVL2_5-4B"
 _INTERN_TARGET_SIZE = 448  # InternViT-300M-448px native resolution
