@@ -1,0 +1,37 @@
+# @package _global_
+# V-JEPA 2 — variante taillée pour GPU 80 GB (350 W class : A100/H100).
+# Diffère des autres vjepa2_* par :
+#   - batch_size 8 (vs 4 ailleurs) — exploite la mémoire dispo, batch effectif inchangé (64).
+#   - grad_accum 8 (vs 16/32) — moitié moins de forward, train ~2× plus rapide.
+#   - num_frozen_blocks=24 (vs 32 pour head, 0 pour fullft) — milieu pour laisser
+#     plus de capacité d'adaptation que vjepa2_head sans la fragilité du fullft.
+#   - 25 epochs (vs 20) — un peu plus de temps avec un train plus rapide.
+defaults:
+  - override /model: vjepa2_head
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 24
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 25
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 0.01
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
