@@ -612,8 +612,16 @@ def main(cfg: DictConfig) -> None:
     )
 
     model = build_model(cfg).to(device)
+    # wandb.watch(log="all") inonde le client wandb sur gros backbones (1B+) :
+    # le buffer sature et les wandb.log() d'epoch suivants disparaissent silencieusement.
+    # On adapte selon le nombre de params trainables ; > 100M = silence complet.
     if _wandb_watch:
-        wandb.watch(model, log="all", log_freq=_wandb_watch_freq)
+        _n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        if _n_train <= 100_000_000:
+            wandb.watch(model, log="gradients", log_freq=_wandb_watch_freq)
+        else:
+            print(f"[wandb] watch skipped: {_n_train/1e6:.0f}M trainable params "
+                  f"(seuil 100M) — métriques d'epoch préservées")
 
     label_smoothing = float(cfg.training.get("label_smoothing", 0.0))
     use_class_weights = bool(cfg.training.get("use_class_weights", False))
