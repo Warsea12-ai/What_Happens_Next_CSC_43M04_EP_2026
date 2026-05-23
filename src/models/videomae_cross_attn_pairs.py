@@ -96,6 +96,8 @@ class VideoMAECrossAttnPairs(nn.Module):
         n_heads: int = 8,
         dropout: float = 0.25,
         head_hidden: int = 1024,
+        lora_rank: int = 0,
+        lora_alpha: float = 0.0,
     ) -> None:
         super().__init__()
         self.num_frozen_blocks = num_frozen_blocks
@@ -109,6 +111,13 @@ class VideoMAECrossAttnPairs(nn.Module):
             trainable = i >= num_frozen_blocks
             for p in block.parameters():
                 p.requires_grad = trainable
+
+        # Optional LoRA on backbone attention (q/v projections, like videomae_lora).
+        # rank=0 → no-op, preserves the existing ablation behavior.
+        if lora_rank > 0:
+            from models.lora_utils import apply_lora
+            _alpha = lora_alpha if lora_alpha > 0 else float(2 * lora_rank)
+            apply_lora(self.encoder, ["query", "value"], rank=lora_rank, alpha=_alpha)
 
         hidden = self.encoder.config.hidden_size  # 768 for base
 

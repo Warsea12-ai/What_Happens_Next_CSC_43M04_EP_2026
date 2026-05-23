@@ -367,6 +367,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
             n_heads=int(cfg.model.get("n_heads", 8)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            lora_rank=int(cfg.model.get("lora_rank", 0)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 0.0)),
         )
     if name == "videomae_multiscale":
         return VideoMAEMultiScale(
