@@ -51,6 +51,7 @@ import torch.nn.functional as F
 _DEFAULT_BACKBONE   = "Qwen/Qwen2.5-VL-3B-Instruct"
 _QWEN_TEMPORAL_PAT  = 2     # native Qwen2.5-VL temporal patch size
 _QWEN_SPATIAL_PAT   = 14    # native Qwen2.5-VL spatial patch size
+_QWEN_SPATIAL_MERGE = 2     # merger groups 2×2 spatially-adjacent patches
 _QWEN_TARGET_H      = 224
 _QWEN_TARGET_W      = 224
 
@@ -82,25 +83,39 @@ def _grab(module: nn.Module, names: list[str]):
 
 
 def _qwen_patchify(x: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int, int]]:
-    """Patchify a video clip into the Qwen2.5-VL native flat-patch format.
+    """Patchify a video clip into Qwen2.5-VL's native flat-patch format.
 
-    x: (B, T, C, H, W) in Qwen normalisation, T must be multiple of 2.
+    x: (B, T, C, H, W) in Qwen normalisation, T multiple of 2.
     Returns:
       patches: (B * num_patches, C * Tpat * P * P)
       grid:    (Tp, Hp, Wp) — same for every video in the batch
+
+    Patch order is spatial-merge-aware: for each temporal index, patches are
+    grouped so that consecutive blocks of (spatial_merge²) patches form a 2×2
+    spatial neighbourhood. This matches the layout expected by the merger's
+    ``view(-1, hidden_size * spatial_merge²)`` projection.
     """
     B, T, C, H, W = x.shape
     Tpat = _QWEN_TEMPORAL_PAT
     P    = _QWEN_SPATIAL_PAT
+    sm   = _QWEN_SPATIAL_MERGE
     assert T % Tpat == 0, f"T={T} must be multiple of {Tpat}"
     assert H % P == 0 and W % P == 0, f"H,W must be multiples of {P}, got {H}×{W}"
     Tp, Hp, Wp = T // Tpat, H // P, W // P
+    assert Hp % sm == 0 and Wp % sm == 0, \
+        f"Hp×Wp ({Hp}×{Wp}) must be divisible by spatial_merge={sm}"
 
-    # (B, T=Tp*Tpat, C, H=Hp*P, W=Wp*P) → (B, Tp, Tpat, C, Hp, P, Wp, P)
-    x = x.view(B, Tp, Tpat, C, Hp, P, Wp, P)
-    # Re-order so each patch's pixels are contiguous: (B, Tp, Hp, Wp, C, Tpat, P, P)
-    x = x.permute(0, 1, 4, 6, 3, 2, 5, 7).contiguous()
-    # Flatten patch grid and pixel dims: (B*Tp*Hp*Wp, C*Tpat*P*P)
+    # (B, T=Tp*Tpat, C, H=Hp*P, W=Wp*P)
+    # → split into (B, Tp, Tpat, C, Hp/sm, sm, P, Wp/sm, sm, P)
+    x = x.view(B, Tp, Tpat, C, Hp // sm, sm, P, Wp // sm, sm, P)
+    # Reorder so consecutive sm×sm patches inside each (Tp, Hb, Wb) block are
+    # memory-adjacent, then patch pixels follow:
+    # → (B, Tp, Hp/sm, Wp/sm, sm, sm, C, Tpat, P, P)
+    x = x.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9).contiguous()
+    # Flatten all but pixel dims:
+    # (B * Tp * Hp/sm * Wp/sm * sm * sm,  C * Tpat * P * P)
+    # which equals (B * Tp * Hp * Wp, C * Tpat * P * P) — same total count,
+    # just ordered so consecutive 4 patches are spatial neighbours.
     patches = x.view(B * Tp * Hp * Wp, C * Tpat * P * P)
     return patches, (Tp, Hp, Wp)
 
@@ -286,11 +301,9 @@ class Qwen25VL3BVideo(nn.Module):
         # 5. Vision tower forward — grid_thw is the same for every video in the batch
         grid_thw = torch.tensor([[Tp, Hp, Wp]] * B,
                                 device=patches.device, dtype=torch.long)
-        # visual returns either a raw tensor (older HF) or BaseModelOutputWithPooling
-        # (transformers 5.x). The interesting payload is the post-merger tokens —
-        # carried by `last_hidden_state` when wrapped.
         with torch.no_grad():
             vis_out = self.visual(patches, grid_thw=grid_thw)
+        # Unwrap: tensor (older HF) or BaseModelOutputWithPooling (transformers 5.x)
         if isinstance(vis_out, torch.Tensor):
             vis_seq = vis_out
         else:
@@ -298,8 +311,26 @@ class Qwen25VL3BVideo(nn.Module):
             if vis_seq is None:
                 vis_seq = vis_out[0] if isinstance(vis_out, (tuple, list)) else vis_out
 
-        # The merger does spatial 2×2 pooling: merged_per_vid = Tp * (Hp/2) * (Wp/2)
-        merged_per_vid = vis_seq.shape[0] // B
+        # In transformers 5.x, the visual encoder returns features at
+        # visual_hidden (e.g. 1280 for Qwen2.5-VL-3B), NOT at llm_hidden.
+        # The merger projects (groups_of_4_at_visual_hidden) → llm_hidden, doing
+        # the spatial 2×2 pool simultaneously. Patchify above already ordered
+        # patches so consecutive 4 are spatial neighbours — merger reshapes
+        # via .view(-1, 4 * visual_hidden) and runs an MLP.
+        if vis_seq.shape[-1] != self.llm_hidden:
+            if hasattr(self.visual, "merger"):
+                with torch.no_grad():
+                    vis_seq = self.visual.merger(vis_seq)
+            else:
+                raise RuntimeError(
+                    f"Visual encoder emits dim {vis_seq.shape[-1]} ≠ LLM dim "
+                    f"{self.llm_hidden} and no .merger module is exposed."
+                )
+
+        # After merger: (B * merged_per_vid, llm_hidden)
+        # merged_per_vid = Tp * (Hp/sm) * (Wp/sm) = 4 * 8 * 8 = 256 for 8×224²
+        total_merged = vis_seq.shape[0]
+        merged_per_vid = total_merged // B
         vis_seq = vis_seq.view(B, merged_per_vid, self.llm_hidden).to(torch.bfloat16)
 
         # 6. Prepend [TASK_CLS]
