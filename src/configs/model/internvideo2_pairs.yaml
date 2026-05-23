@@ -1,6 +1,6 @@
 name: internvideo2_pairs
 num_classes: 33
-backbone: "OpenGVLab/InternVideo2-Stage2-1B-224p"
+backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p"
 backbone_dtype: "bfloat16"
 use_lora: true
 lora_rank: 16

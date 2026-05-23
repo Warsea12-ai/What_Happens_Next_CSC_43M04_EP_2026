@@ -22,7 +22,7 @@ defaults:
   - override /model: internvideo2_pairs
 
 model:
-  backbone: "OpenGVLab/InternVideo2-Stage2-1B-224p"
+  backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p"
   backbone_dtype: "bfloat16"
   use_lora: true
   lora_rank: 16
