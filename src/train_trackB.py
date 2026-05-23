@@ -577,7 +577,30 @@ def build_optimizer(model: nn.Module, cfg: DictConfig) -> torch.optim.Optimizer:
     else:
         param_groups = [{"params": model.parameters(), "lr": base_lr}]
 
-    return torch.optim.AdamW(param_groups, weight_decay=weight_decay)
+    opt_name = str(cfg.training.get("optimizer", "adamw")).lower()
+    if opt_name == "adamw":
+        return torch.optim.AdamW(param_groups, weight_decay=weight_decay)
+    if opt_name == "adam":
+        return torch.optim.Adam(param_groups, weight_decay=weight_decay)
+    if opt_name == "sgd":
+        momentum = float(cfg.training.get("momentum", 0.9))
+        return torch.optim.SGD(param_groups, momentum=momentum, weight_decay=weight_decay)
+    if opt_name == "lion":
+        from lion_pytorch import Lion
+        return Lion(param_groups, weight_decay=weight_decay)
+    if opt_name == "prodigy":
+        from prodigyopt import Prodigy
+        # Prodigy adapte le LR effectif automatiquement : on passe lr=1.0 partout
+        # et on conserve uniquement la structure des param_groups (pas le ratio).
+        for g in param_groups:
+            g["lr"] = 1.0
+        return Prodigy(
+            param_groups, lr=1.0,
+            weight_decay=weight_decay,
+            decouple=True,
+            safeguard_warmup=True,
+        )
+    raise ValueError(f"Unknown optimizer: {opt_name!r}")
 
 
 # ── training loop ─────────────────────────────────────────────────────────────
