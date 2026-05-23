@@ -32,5 +32,9 @@ training:
   use_mixup: false
   mixup_alpha: 0.2
 
-  #Temporal reverse map 
+  #Temporal reverse map
   use_temporal_map : false                #décisif
+
+  # wandb — histogrammes poids/gradients par couche (lourd sur très gros modèles)
+  wandb_watch: true
+  wandb_watch_freq: 500

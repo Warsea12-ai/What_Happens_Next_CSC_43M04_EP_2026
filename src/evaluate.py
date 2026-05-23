@@ -10,8 +10,9 @@ Example (from ``src/``)::
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import hydra
 import torch
@@ -22,6 +23,13 @@ from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 import train as _train_a
 import train_trackB as _train_b
 from utils import build_transforms, set_seed
+
+try:
+    import wandb
+    _WANDB_OK = True
+except Exception as _wandb_err:
+    print(f"[wandb] import failed ({_wandb_err}) — eval logging désactivé")
+    _WANDB_OK = False
 
 _TRACK_B_MODELS = {
     "videomae", "motion_videomae", "frozen_videomae", "swin3d_finetune",
@@ -146,6 +154,8 @@ def main(cfg: DictConfig) -> None:
     total = 0
     num_classes = int(cfg.model.num_classes) if hasattr(cfg, "model") else 33
     conf_matrix = torch.zeros(num_classes, num_classes, dtype=torch.long)
+    all_preds: List[int] = []
+    all_labels: List[int] = []
 
     with torch.no_grad():
         for video_batch, labels in val_loader:
@@ -180,6 +190,8 @@ def main(cfg: DictConfig) -> None:
             labels_cpu = labels.cpu()
             for p, l in zip(preds_cpu, labels_cpu):
                 conf_matrix[l.item(), p.item()] += 1
+            all_preds.extend(preds_cpu.tolist())
+            all_labels.extend(labels_cpu.tolist())
 
     top1_accuracy = correct_top1 / max(total, 1)
     top5_accuracy = correct_top5 / max(total, 1)
@@ -218,6 +230,52 @@ def main(cfg: DictConfig) -> None:
     )
     np.save(cm_path, conf_matrix.numpy())
     print(f"\nConfusion matrix saved → {cm_path}")
+
+    # ── wandb logging ─────────────────────────────────────────────────────────
+    # New run named "<train_run>_eval" (or checkpoint stem if no env var set).
+    # Logs top-1/top-5, confusion matrix, per-class accuracy. Silently no-ops
+    # when WANDB_API_KEY is absent — wandb's offline mode would clutter logs.
+    if _WANDB_OK and os.environ.get("WANDB_API_KEY"):
+        try:
+            base_name = os.environ.get("WANDB_RUN_NAME") or checkpoint_path.stem
+            wandb.init(
+                project=os.environ.get(
+                    "WANDB_PROJECT", "What_Happens_Next_CSC_43M04_EP_2026"
+                ),
+                name=f"{base_name}_eval",
+                job_type="eval",
+                config={
+                    "checkpoint_path": str(checkpoint_path),
+                    "val_dir":         str(val_dir),
+                    "num_samples":     total,
+                    "num_classes":     num_classes,
+                    "use_multi_crop":  use_multi_crop,
+                    "use_tta":         use_tta,
+                    "num_frames":      num_frames,
+                },
+                reinit=True,
+            )
+            class_names = [str(i) for i in range(num_classes)]
+            wandb.log({
+                "eval/top1": top1_accuracy,
+                "eval/top5": top5_accuracy,
+                "eval/num_samples": total,
+                "eval/confusion_matrix": wandb.plot.confusion_matrix(
+                    y_true=all_labels, preds=all_preds, class_names=class_names,
+                ),
+            })
+            per_class_dict = {
+                f"eval_per_class_acc/class_{c}": float(per_class_acc[c].item())
+                for c in range(num_classes) if int(per_class_total[c]) > 0
+            }
+            wandb.log(per_class_dict)
+            wandb.run.summary["eval_top1"] = top1_accuracy
+            wandb.run.summary["eval_top5"] = top5_accuracy
+            wandb.finish()
+        except Exception as exc:
+            print(f"[wandb] eval logging skipped ({exc})")
+    else:
+        print("[wandb] WANDB_API_KEY non défini — eval non envoyé à wandb")
 
 
 if __name__ == "__main__":

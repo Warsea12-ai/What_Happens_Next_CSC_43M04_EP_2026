@@ -18,6 +18,8 @@ from typing import Tuple
 
 import torch
 import torch.nn.functional as F
+import os
+import wandb
 
 @torch.no_grad()
 def color_jitter_video(
@@ -399,6 +401,12 @@ def evaluate_epoch(
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "What_Happens_Next_CSC_43M04_EP_2026"),
+        name=os.environ.get("WANDB_RUN_NAME"),
+        resume="allow",
+    )
+
     set_seed(int(cfg.dataset.seed))
 
     device_str = cfg.training.device
@@ -491,8 +499,19 @@ def main(cfg: DictConfig) -> None:
 
     best_val_accuracy = 0.0
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
+    start_epoch = 0
 
-    for epoch in range(int(cfg.training.epochs)):
+    if checkpoint_path.exists():
+        print(f"  Checkpoint trouvé : {checkpoint_path} — reprise de l'entraînement...")
+        _ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(_ckpt["model_state_dict"])
+        if "optimizer_state_dict" in _ckpt:
+            optimizer.load_state_dict(_ckpt["optimizer_state_dict"])
+        start_epoch       = _ckpt.get("epoch", 0)
+        best_val_accuracy = _ckpt.get("best_val_accuracy", _ckpt.get("val_accuracy", 0.0))
+        print(f"  Reprise depuis epoch {start_epoch} (best val acc={best_val_accuracy:.4f})")
+
+    for epoch in range(start_epoch, int(cfg.training.epochs)):
         train_loss, train_acc = train_one_epoch(
             model, train_loader, loss_fn, optimizer, device,
             num_classes=int(cfg.model.num_classes),
@@ -508,25 +527,38 @@ def main(cfg: DictConfig) -> None:
             f"train loss {train_loss:.4f} acc {train_acc:.4f} | "
             f"val loss {val_loss:.4f} acc {val_acc:.4f}"
         )
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "lr": optimizer.param_groups[0]["lr"],
+        }, step=epoch + 1)
 
         if val_acc > best_val_accuracy:
             best_val_accuracy = val_acc
             payload: Dict[str, Any] = {
-                "model_state_dict": model.state_dict(),
-                "model_name": cfg.model.name,
-                "num_classes": int(cfg.model.num_classes),
-                "pretrained": bool(cfg.model.pretrained),
-                "num_frames": int(cfg.dataset.num_frames),
-                "val_accuracy": val_acc,
-                "config": OmegaConf.to_container(cfg, resolve=True),
+                "model_state_dict":     model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "epoch":                epoch + 1,
+                "best_val_accuracy":    best_val_accuracy,
+                "model_name":           cfg.model.name,
+                "num_classes":          int(cfg.model.num_classes),
+                "pretrained":           bool(cfg.model.pretrained),
+                "num_frames":           int(cfg.dataset.num_frames),
+                "val_accuracy":         val_acc,
+                "config":               OmegaConf.to_container(cfg, resolve=True),
             }
             if cfg.model.name == "cnn_lstm":
                 payload["lstm_hidden_size"] = int(cfg.model.get("lstm_hidden_size", 512))
 
             torch.save(payload, checkpoint_path)
-            print(f"  Saved new best model to {checkpoint_path} (val acc={val_acc:.4f})")
+            print(f"  Saved new best model to {checkpoint_path} (epoch={epoch + 1}, val acc={val_acc:.4f})")
+            wandb.run.summary["best_val_acc"] = val_acc
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
+    wandb.finish()
 
 
 if __name__ == "__main__":

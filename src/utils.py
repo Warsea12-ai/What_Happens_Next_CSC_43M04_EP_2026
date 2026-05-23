@@ -97,6 +97,73 @@ def accuracy_topk(
     return tuple(accuracies)
 
 
+def measure_grad_norm(parameters) -> float:
+    """Total L2 norm of all gradients combined, without clipping.
+
+    Call after ``loss.backward()`` and before ``optimizer.step()``.
+    Uses ``clip_grad_norm_`` with ``max_norm=inf`` so gradients are inspected
+    but not modified — convenient single source for the actual gradient norm
+    even when no clipping is configured.
+    """
+    return float(
+        torch.nn.utils.clip_grad_norm_(parameters, max_norm=float("inf")).item()
+    )
+
+
+@torch.no_grad()
+def log_wandb_diagnostics(
+    model,
+    val_loader,
+    device,
+    num_classes: int,
+    prefix: str = "val",
+    class_names: List[str] | None = None,
+) -> None:
+    """Run one validation pass, log confusion matrix + per-class accuracy to wandb.
+
+    Call after restoring the best checkpoint at the end of training. Silently
+    no-ops when wandb is not installed or no active run.
+    """
+    try:
+        import wandb  # noqa: WPS433
+    except Exception:
+        return
+    if getattr(wandb, "run", None) is None:
+        return
+
+    model.eval()
+    all_preds: List[int] = []
+    all_labels: List[int] = []
+    for video_batch, labels in val_loader:
+        video_batch = video_batch.to(device)
+        logits = model(video_batch)
+        all_preds.extend(logits.argmax(dim=1).cpu().tolist())
+        all_labels.extend(labels.cpu().tolist())
+
+    names = class_names or [str(i) for i in range(num_classes)]
+    try:
+        wandb.log({
+            f"{prefix}/confusion_matrix": wandb.plot.confusion_matrix(
+                y_true=all_labels, preds=all_preds, class_names=names,
+            ),
+        })
+    except Exception as exc:
+        print(f"[wandb] confusion_matrix skipped ({exc})")
+
+    preds_arr = np.array(all_preds)
+    labels_arr = np.array(all_labels)
+    per_class = {}
+    for c in range(num_classes):
+        mask = labels_arr == c
+        n = int(mask.sum())
+        if n > 0:
+            per_class[f"{prefix}_per_class_acc/class_{c}"] = (
+                float((preds_arr[mask] == c).sum()) / n
+            )
+    if per_class:
+        wandb.log(per_class)
+
+
 def split_train_val(
     samples: List[Tuple[Path, int]],
     val_ratio: float,

@@ -49,7 +49,7 @@ from models.R2Plus1D import R2Plus1D
 from models.TSM import TSM
 from models.TSM_RES import TSMResNet50
 from models.X3D import X3D
-from utils import build_transforms, set_seed, split_train_val
+from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 from models.swin3d_finetune import VideoSwinFinetune
 from models.vit_temporal import ViTTemporal
 from models.state_compare_net import StateCompareNet
@@ -59,6 +59,10 @@ from models.actionlet_net import ActionletNet
 from models.temporal_reversal_net import TemporalReversalNet
 from models.soft_flow_net import SoftFlowNet
 from torchvision.models.video import mvit_v1_b
+
+import os
+import time
+import wandb
 
 
 _IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
@@ -434,12 +438,13 @@ def train_one_epoch(
     use_mixup: bool = False,
     mixup_alpha: float = 0.2,
     num_classes: int = 33,
-) -> Tuple[float, float]:
-    """Returns (average loss, top-1 accuracy) on the training set for one epoch."""
+) -> Tuple[float, float, float]:
+    """Returns (average loss, top-1 accuracy, mean grad norm) for one epoch."""
     model.train()
     running_loss = 0.0
     correct = 0
     total = 0
+    grad_norm_sum = 0.0
     aug_kwargs = aug_kwargs or {}
 
     for video_batch, labels in data_loader:
@@ -479,11 +484,14 @@ def train_one_epoch(
                 loss = loss_fn(logits, labels)
 
         loss.backward()
-        if clip_grad_norm > 0:
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
+        batch_grad_norm = float(nn.utils.clip_grad_norm_(
+            model.parameters(),
+            max_norm=clip_grad_norm if clip_grad_norm > 0 else float("inf"),
+        ).item())
         optimizer.step()
 
         running_loss += float(loss.item()) * labels.size(0)
+        grad_norm_sum += batch_grad_norm * labels.size(0)
         predictions = logits.argmax(dim=1)
         hard_labels = soft_labels.argmax(dim=1) if soft_labels is not None else labels
         correct += int((predictions == hard_labels).sum().item())
@@ -491,8 +499,9 @@ def train_one_epoch(
 
     average_loss = running_loss / max(total, 1)
     accuracy = correct / max(total, 1)
-    print(f"  Train loss: {average_loss:.4f}, accuracy: {accuracy:.4f}")
-    return average_loss, accuracy
+    grad_norm = grad_norm_sum / max(total, 1)
+    print(f"  Train loss: {average_loss:.4f}, accuracy: {accuracy:.4f}, grad_norm: {grad_norm:.3f}")
+    return average_loss, accuracy, grad_norm
 
 
 @torch.no_grad()
@@ -528,6 +537,17 @@ def evaluate_epoch(
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
+
+    wandb.init(
+        project=os.environ.get("WANDB_PROJECT", "What_Happens_Next_CSC_43M04_EP_2026"),
+        name=os.environ.get("WANDB_RUN_NAME"),
+        config=OmegaConf.to_container(cfg, resolve=True),
+        resume="allow",
+    )
+    # Per-layer weight/gradient histograms. On by default; override with
+    # cfg.training.wandb_watch=false on huge models if the overhead bites.
+    _wandb_watch = bool(cfg.training.get("wandb_watch", True))
+    _wandb_watch_freq = int(cfg.training.get("wandb_watch_freq", 500))
 
     set_seed(int(cfg.dataset.seed))
 
@@ -592,6 +612,8 @@ def main(cfg: DictConfig) -> None:
     )
 
     model = build_model(cfg).to(device)
+    if _wandb_watch:
+        wandb.watch(model, log="all", log_freq=_wandb_watch_freq)
 
     label_smoothing = float(cfg.training.get("label_smoothing", 0.0))
     use_class_weights = bool(cfg.training.get("use_class_weights", False))
@@ -660,10 +682,26 @@ def main(cfg: DictConfig) -> None:
     checkpoint_path = Path(cfg.training.checkpoint_path).resolve()
     recent_save_accs: list = []
     epochs_since_save = 0
+    start_epoch = 0
 
-    for epoch in range(total_epochs):
+    if checkpoint_path.exists():
+        print(f"  Checkpoint trouvé : {checkpoint_path} — reprise de l'entraînement...")
+        _ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        model.load_state_dict(_ckpt["model_state_dict"])
+        if "optimizer_state_dict" in _ckpt:
+            optimizer.load_state_dict(_ckpt["optimizer_state_dict"])
+        if scheduler is not None and _ckpt.get("scheduler_state_dict") is not None:
+            scheduler.load_state_dict(_ckpt["scheduler_state_dict"])
+        start_epoch       = _ckpt.get("epoch", 0)
+        best_val_accuracy = _ckpt.get("best_val_accuracy", _ckpt.get("val_accuracy", 0.0))
+        recent_save_accs  = _ckpt.get("recent_save_accs", [])
+        epochs_since_save = _ckpt.get("epochs_since_save", 0)
+        print(f"  Reprise depuis epoch {start_epoch}/{total_epochs} (best val acc={best_val_accuracy:.4f})")
+
+    for epoch in range(start_epoch, total_epochs):
         current_lr = optimizer.param_groups[0]["lr"]
-        train_loss, train_acc = train_one_epoch(
+        epoch_t0 = time.perf_counter()
+        train_loss, train_acc, grad_norm = train_one_epoch(
             model, train_loader, loss_fn, optimizer, device,
             clip_grad_norm=clip_grad_norm,
             use_augment=use_augment,
@@ -678,7 +716,10 @@ def main(cfg: DictConfig) -> None:
             mixup_alpha=mixup_alpha,
             num_classes=num_classes,
         )
+        train_time = time.perf_counter() - epoch_t0
+        val_t0 = time.perf_counter()
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
+        val_time = time.perf_counter() - val_t0
         if scheduler is not None:
             scheduler.step()
 
@@ -686,20 +727,41 @@ def main(cfg: DictConfig) -> None:
             f"Epoch {epoch + 1}/{total_epochs} | "
             f"train loss {train_loss:.4f} acc {train_acc:.4f} | "
             f"val loss {val_loss:.4f} acc {val_acc:.4f} | "
-            f"lr {current_lr:.2e}"
+            f"lr {current_lr:.2e} | grad {grad_norm:.2f} | "
+            f"t {train_time:.0f}+{val_time:.0f}s"
         )
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "lr": current_lr,
+            "grad_norm": grad_norm,
+            "epoch_time_train_s": train_time,
+            "epoch_time_val_s": val_time,
+            "epoch_time_total_s": train_time + val_time,
+        }, step=epoch + 1)
 
         if val_acc > best_val_accuracy:
             best_val_accuracy = val_acc
+            recent_save_accs.append(val_acc)
+            epochs_since_save = 0
             payload: Dict[str, Any] = {
-                "model_state_dict": model.state_dict(),
-                "model_name": cfg.model.name,
-                "num_classes": int(cfg.model.num_classes),
-                "pretrained": bool(cfg.model.get("pretrained", False)),
-                "use_imagenet_norm": use_imagenet_norm,
-                "num_frames": int(cfg.dataset.num_frames),
-                "val_accuracy": val_acc,
-                "config": OmegaConf.to_container(cfg, resolve=True),
+                "model_state_dict":     model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
+                "epoch":                epoch + 1,
+                "best_val_accuracy":    best_val_accuracy,
+                "recent_save_accs":     recent_save_accs,
+                "epochs_since_save":    0,
+                "model_name":           cfg.model.name,
+                "num_classes":          int(cfg.model.num_classes),
+                "pretrained":           bool(cfg.model.get("pretrained", False)),
+                "use_imagenet_norm":    use_imagenet_norm,
+                "num_frames":           int(cfg.dataset.num_frames),
+                "val_accuracy":         val_acc,
+                "config":               OmegaConf.to_container(cfg, resolve=True),
             }
             if cfg.model.name == "cnn_lstm":
                 payload["lstm_hidden_size"] = int(
@@ -708,10 +770,11 @@ def main(cfg: DictConfig) -> None:
 
             torch.save(payload, checkpoint_path)
             print(
-                f"  Saved new best model to {checkpoint_path} (val acc={val_acc:.4f})"
+                f"  Saved new best model to {checkpoint_path} "
+                f"(epoch={epoch + 1}, val acc={val_acc:.4f})"
             )
-            epochs_since_save = 0
-            recent_save_accs.append(val_acc)
+            wandb.run.summary["best_val_acc"] = val_acc
+            wandb.run.summary["best_epoch"] = epoch + 1
         else:
             epochs_since_save += 1
 
@@ -726,6 +789,15 @@ def main(cfg: DictConfig) -> None:
             break
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
+    # Reload best checkpoint to log final confusion matrix + per-class accuracy.
+    if checkpoint_path.exists():
+        try:
+            _best = torch.load(checkpoint_path, map_location=device, weights_only=False)
+            model.load_state_dict(_best["model_state_dict"])
+            log_wandb_diagnostics(model, val_loader, device, num_classes)
+        except Exception as exc:
+            print(f"[wandb] diagnostics skipped ({exc})")
+    wandb.finish()
 
 
 if __name__ == "__main__":

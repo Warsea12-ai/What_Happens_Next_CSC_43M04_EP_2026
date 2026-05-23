@@ -56,9 +56,10 @@ from models.internvit6b_pairwise import InternViT6BPairwise
 from models.vjepa2_variants import VJEPA2Variant
 from models.internvideo2 import InternVideo2
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
-from utils import build_transforms, set_seed, split_train_val
+from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 
 import os
+import time
 try:
     import wandb
     _WANDB_OK = True
@@ -512,9 +513,11 @@ def train_one_epoch(
     use_temporal_map: bool = False,
     clip_grad_norm: float = 1.0,
     grad_accum_steps: int = 1,
-) -> Tuple[float, float]:
+) -> Tuple[float, float, float]:
     model.train()
     running_loss, correct, total = 0.0, 0, 0
+    grad_norm_sum = 0.0
+    grad_norm_n = 0
     aug_kwargs = aug_kwargs or {}
     n_batches = len(data_loader)
 
@@ -542,8 +545,12 @@ def train_one_epoch(
 
         is_last_batch = (step + 1 == n_batches)
         if (step + 1) % grad_accum_steps == 0 or is_last_batch:
-            if clip_grad_norm > 0:
-                nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
+            batch_grad_norm = float(nn.utils.clip_grad_norm_(
+                model.parameters(),
+                max_norm=clip_grad_norm if clip_grad_norm > 0 else float("inf"),
+            ).item())
+            grad_norm_sum += batch_grad_norm
+            grad_norm_n += 1
             optimizer.step()
             optimizer.zero_grad()
 
@@ -553,8 +560,9 @@ def train_one_epoch(
 
     avg_loss = running_loss / max(total, 1)
     acc = correct / max(total, 1)
-    print(f"  Train loss: {avg_loss:.4f}, accuracy: {acc:.4f}")
-    return avg_loss, acc
+    grad_norm = grad_norm_sum / max(grad_norm_n, 1)
+    print(f"  Train loss: {avg_loss:.4f}, accuracy: {acc:.4f}, grad_norm: {grad_norm:.3f}")
+    return avg_loss, acc, grad_norm
 
 
 @torch.no_grad()
@@ -587,6 +595,8 @@ def main(cfg: DictConfig) -> None:
         config=OmegaConf.to_container(cfg, resolve=True),
         resume="allow",
     )
+    _wandb_watch = bool(cfg.training.get("wandb_watch", True))
+    _wandb_watch_freq = int(cfg.training.get("wandb_watch_freq", 500))
 
     set_seed(int(cfg.dataset.seed))
 
@@ -633,6 +643,8 @@ def main(cfg: DictConfig) -> None:
     )
 
     model = build_model(cfg).to(device)
+    if _wandb_watch:
+        wandb.watch(model, log="all", log_freq=_wandb_watch_freq)
 
     loss_fn = nn.CrossEntropyLoss(
         label_smoothing=float(cfg.training.get("label_smoothing", 0.1))
@@ -725,7 +737,8 @@ def main(cfg: DictConfig) -> None:
                 break
 
         current_lr = optimizer.param_groups[-1]["lr"]  # head LR
-        train_loss, train_acc = train_one_epoch(
+        epoch_t0 = time.perf_counter()
+        train_loss, train_acc, grad_norm = train_one_epoch(
             model, train_loader, loss_fn, optimizer, device,
             use_augment=use_augment, aug_kwargs=aug_kwargs,
             flip_forbidden=flip_forbidden, flip_prob=flip_prob,
@@ -734,14 +747,18 @@ def main(cfg: DictConfig) -> None:
             clip_grad_norm=clip_grad_norm,
             grad_accum_steps=grad_accum_steps,
         )
+        train_time = time.perf_counter() - epoch_t0
+        val_t0 = time.perf_counter()
         val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
+        val_time = time.perf_counter() - val_t0
         scheduler.step()
 
         print(
             f"Epoch {epoch + 1}/{total_epochs} | "
             f"train loss {train_loss:.4f} acc {train_acc:.4f} | "
             f"val loss {val_loss:.4f} acc {val_acc:.4f} | "
-            f"head_lr {current_lr:.2e}"
+            f"head_lr {current_lr:.2e} | grad {grad_norm:.2f} | "
+            f"t {train_time:.0f}+{val_time:.0f}s"
         )
         wandb.log({
             "epoch": epoch + 1,
@@ -750,6 +767,10 @@ def main(cfg: DictConfig) -> None:
             "val/loss": val_loss,
             "val/acc": val_acc,
             "head_lr": current_lr,
+            "grad_norm": grad_norm,
+            "epoch_time_train_s": train_time,
+            "epoch_time_val_s": val_time,
+            "epoch_time_total_s": train_time + val_time,
         }, step=epoch + 1)
 
         if val_acc > best_val_accuracy:
@@ -774,6 +795,7 @@ def main(cfg: DictConfig) -> None:
             }, checkpoint_path)
             print(f"  Saved best model to {checkpoint_path} (epoch={epoch + 1}, val acc={val_acc:.4f})")
             wandb.run.summary["best_val_acc"] = val_acc
+            wandb.run.summary["best_epoch"] = epoch + 1
         else:
             epochs_since_save += 1
 
@@ -788,6 +810,13 @@ def main(cfg: DictConfig) -> None:
             break
 
     print(f"Done. Best validation accuracy: {best_val_accuracy:.4f}")
+    if checkpoint_path.exists():
+        try:
+            _best = torch.load(checkpoint_path, map_location=device, weights_only=False)
+            model.load_state_dict(_best["model_state_dict"])
+            log_wandb_diagnostics(model, val_loader, device, num_classes)
+        except Exception as exc:
+            print(f"[wandb] diagnostics skipped ({exc})")
     wandb.finish()
 
 
