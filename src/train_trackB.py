@@ -112,6 +112,37 @@ def _install_transformers_compat_shim():
             return heads, index
         _tmu.find_pruneable_heads_and_indices = find_pruneable_heads_and_indices
 
+    # 4) tokenization helpers removed from transformers.tokenization_utils in 5.x.
+    # InternVideo2 modeling code does:
+    #   from transformers.tokenization_utils import (PreTrainedTokenizer,
+    #       _is_control, _is_punctuation, _is_whitespace)
+    # PreTrainedTokenizer still lives there; the three underscore helpers don't.
+    # Re-add canonical implementations (lifted from historical transformers).
+    import transformers.tokenization_utils as _tok
+    import unicodedata as _ud
+
+    if not hasattr(_tok, "_is_control"):
+        def _is_control(char):
+            if char in ("\t", "\n", "\r"):
+                return False
+            return _ud.category(char).startswith("C")
+        _tok._is_control = _is_control
+
+    if not hasattr(_tok, "_is_punctuation"):
+        def _is_punctuation(char):
+            cp = ord(char)
+            if (33 <= cp <= 47) or (58 <= cp <= 64) or (91 <= cp <= 96) or (123 <= cp <= 126):
+                return True
+            return _ud.category(char).startswith("P")
+        _tok._is_punctuation = _is_punctuation
+
+    if not hasattr(_tok, "_is_whitespace"):
+        def _is_whitespace(char):
+            if char in (" ", "\t", "\n", "\r"):
+                return True
+            return _ud.category(char) == "Zs"
+        _tok._is_whitespace = _is_whitespace
+
 try:
     _install_transformers_compat_shim()
 except Exception as _e:
