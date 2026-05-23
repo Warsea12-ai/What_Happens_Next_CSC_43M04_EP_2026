@@ -110,14 +110,30 @@ class InternVL25_4BVideo(nn.Module):
 
         # ── Load InternVL2.5-4B (trust_remote_code) ───────────────────────────
         print(f"[InternVL25_4BVideo] Loading {backbone} (bfloat16)…")
-        from transformers import AutoModel
+        from transformers import AutoConfig, AutoModel
         from peft import LoraConfig, get_peft_model
+
+        # Force eager attention everywhere — InternVL's custom code instantiates
+        # Qwen2ForCausalLM(config.llm_config) directly, so the attn_implementation
+        # kwarg on from_pretrained never reaches the inner LLM. We mutate the
+        # sub-configs ourselves to bypass the flash_attn check that crashes with
+        # "flash_attn.__spec__ is None" on hosts with a half-installed flash_attn.
+        config = AutoConfig.from_pretrained(
+            backbone, cache_dir=cache_dir, trust_remote_code=True,
+        )
+        config._attn_implementation = "eager"
+        for sub in ("llm_config", "vision_config", "text_config"):
+            sub_cfg = getattr(config, sub, None)
+            if sub_cfg is not None:
+                sub_cfg._attn_implementation = "eager"
 
         full = AutoModel.from_pretrained(
             backbone, cache_dir=cache_dir,
+            config=config,
             torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=True,
             trust_remote_code=True,
+            attn_implementation="eager",
         )
 
         # InternVL chat model layout:
