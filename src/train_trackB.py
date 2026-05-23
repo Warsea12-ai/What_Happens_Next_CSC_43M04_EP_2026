@@ -671,16 +671,22 @@ def main(cfg: DictConfig) -> None:
     )
 
     model = build_model(cfg).to(device)
-    # wandb.watch(log="all") inonde le client wandb sur gros backbones (1B+) :
-    # le buffer sature et les wandb.log() d'epoch suivants disparaissent silencieusement.
-    # On adapte selon le nombre de params trainables ; > 100M = silence complet.
+    # wandb.watch(log="all") snapshote TOUS les params (frozen inclus) → satura le
+    # buffer sur backbones 1B+ et faisait disparaître les wandb.log() d'epoch.
+    # log="gradients" ne hook que les params trainables (frozen → pas de grad →
+    # pas de hook), donc safe même avec un backbone 6.7B frozen + head 55M trainable.
+    # On ne garde "all" que pour les modèles vraiment petits.
     if _wandb_watch:
         _n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        if _n_train <= 100_000_000:
-            wandb.watch(model, log="gradients", log_freq=_wandb_watch_freq)
+        _n_total = sum(p.numel() for p in model.parameters())
+        if _n_train <= 100_000_000 and _n_total <= 200_000_000:
+            _mode, _freq = "all", _wandb_watch_freq
         else:
-            print(f"[wandb] watch skipped: {_n_train/1e6:.0f}M trainable params "
-                  f"(seuil 100M) — métriques d'epoch préservées")
+            _mode = "gradients"
+            _freq = max(_wandb_watch_freq, 2000) if _n_train > 500_000_000 else _wandb_watch_freq
+        wandb.watch(model, log=_mode, log_freq=_freq)
+        print(f"[wandb] watch: {_n_train/1e6:.0f}M trainable / {_n_total/1e6:.0f}M total, "
+              f"log='{_mode}', log_freq={_freq}")
 
     loss_fn = nn.CrossEntropyLoss(
         label_smoothing=float(cfg.training.get("label_smoothing", 0.1))
