@@ -1,0 +1,38 @@
+# @package _global_
+# Ablation variant : unfreeze the last 4 V-JEPA blocks (36/40 frozen).
+# Tests whether letting V-JEPA's top blocks co-adapt with LLaMA improves accuracy.
+# Requires A100 40GB+ (V-JEPA gradients add ~3-4 GB).
+defaults:
+  - override /model: vjepa2_llama3_vlm
+
+model:
+  num_frozen_vjepa_blocks: 36       # 4 trainable V-JEPA blocks
+  vision_token_pool: "spatial2x"
+  lora_rank: 16
+  lora_alpha: 32.0
+  head_hidden: 2048
+  dropout: 0.3
+
+training:
+  epochs: 25
+  lr: 1.0e-4                        # head + projector + LoRA lr
+  backbone_lr_scale: 0.05           # V-JEPA blocks get lr × 0.05
+  llrd_factor: 0.80                 # geometric decay across the 4 trainable blocks
+  batch_size: 1
+  grad_accum_steps: 16
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 4
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

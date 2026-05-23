@@ -1,0 +1,27 @@
+name: vjepa2_llama3_vlm
+num_classes: 33
+
+vjepa_backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+llama_backbone: "meta-llama/Llama-3.1-8B-Instruct"
+
+# 40/40 = V-JEPA encoder fully frozen — LoRA on LLaMA + projector + head
+# carry the task adaptation. Set < 40 to thaw the last few V-JEPA blocks too
+# (e.g. 36 = last 4 blocks trainable), at a memory cost.
+num_frozen_vjepa_blocks: 40
+
+# How aggressively to pool V-JEPA's 1568 tokens before they hit LLaMA.
+# "spatial2x" (392 tokens) is the default sweet spot; switch to "both" (196)
+# if memory is tight, or "none" (1568) for the most expressive run.
+vision_token_pool: "spatial2x"
+
+# LoRA on LLaMA-3.1-8B
+lora_rank: 16
+lora_alpha: 32.0
+lora_dropout: 0.05
+lora_targets: ["q_proj", "v_proj"]
+
+# Classification head
+head_hidden: 2048
+dropout: 0.3
+
+use_gradient_checkpointing: true

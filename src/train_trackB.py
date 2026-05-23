@@ -57,6 +57,7 @@ from models.vjepa2_variants import VJEPA2Variant
 from models.internvideo2 import InternVideo2
 from models.internvideo2_pairs import InternVideo2Pairs
 from models.llava_mistral_video import LlavaMistralVideo
+from models.vjepa2_llama3_vlm import VJEPA2Llama3VLM
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 
@@ -487,6 +488,21 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lora_rank=int(cfg.model.get("lora_rank", 8)),
             lora_alpha=float(cfg.model.get("lora_alpha", 16.0)),
             scale_indices=tuple(cfg.model.get("scale_indices", (6, 9, 12))),
+        )
+    if name == "vjepa2_llama3_vlm":
+        return VJEPA2Llama3VLM(
+            num_classes=int(cfg.model.num_classes),
+            vjepa_backbone=str(cfg.model.get("vjepa_backbone", "facebook/vjepa2-vitg-fpc64-384-ssv2")),
+            llama_backbone=str(cfg.model.get("llama_backbone", "meta-llama/Llama-3.1-8B-Instruct")),
+            num_frozen_vjepa_blocks=int(cfg.model.get("num_frozen_vjepa_blocks", 40)),
+            vision_token_pool=str(cfg.model.get("vision_token_pool", "spatial2x")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            lora_dropout=float(cfg.model.get("lora_dropout", 0.05)),
+            lora_targets=tuple(cfg.model.get("lora_targets", ("q_proj", "v_proj"))),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

@@ -1,0 +1,49 @@
+# @package _global_
+# VJEPA2Llama3VLM — V-JEPA 2 ViT-G vision tower + LLaMA-3.1-8B (LoRA) LLM.
+#
+# Replaces CLIP-L in LlavaMistralVideo by the SSv2-pretrained V-JEPA 2 ViT-G
+# (already our best single-model backbone) and pairs it with LLaMA-3.1-8B,
+# the most recent open 8B-class LLM. This is the "flagship VLM" axis from the
+# research plan (axis 4): tests whether a video-native, in-domain vision tower
+# fused with a stronger LLM beats CLIP+Llama-2 on action anticipation.
+#
+# Memory : ~20-21 GB bf16 with default settings. Tight on 24GB GPUs.
+#          batch_size=1 + grad_accum_steps=16 → effective batch 16.
+#          If OOM: drop vision_token_pool to "both" (196 tokens) or "spatial4x" (128).
+#
+# Recommended host : A100 40GB or H100 80GB. Will fit on A5000/3090 24GB
+#                    with the "both" pooling and batch=1.
+defaults:
+  - override /model: vjepa2_llama3_vlm
+
+model:
+  num_frozen_vjepa_blocks: 40       # full freeze for first pass
+  vision_token_pool: "spatial2x"    # 8 × 7×7 = 392 vision tokens
+  lora_rank: 16
+  lora_alpha: 32.0
+  head_hidden: 2048
+  dropout: 0.3
+
+training:
+  epochs: 25
+  lr: 1.0e-4                        # head + projector + LoRA share this lr
+  backbone_lr_scale: 0.0            # V-JEPA fully frozen — no backbone LR needed
+  llrd_factor: 1.0                  # no LLRD (only relevant if vjepa unfrozen)
+  batch_size: 1
+  grad_accum_steps: 16              # effective batch 16
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

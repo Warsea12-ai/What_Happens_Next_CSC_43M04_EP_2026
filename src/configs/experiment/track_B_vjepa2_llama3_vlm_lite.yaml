@@ -1,0 +1,38 @@
+# @package _global_
+# Lite variant of track_B_vjepa2_llama3_vlm — aggressive token pooling for 24GB GPUs.
+# 196 vision tokens (4 temporal × 7×7 spatial) → much smaller LLaMA sequence,
+# allowing batch_size=2 and faster epochs at the cost of some temporal info.
+defaults:
+  - override /model: vjepa2_llama3_vlm
+
+model:
+  num_frozen_vjepa_blocks: 40
+  vision_token_pool: "both"         # 4 × 7×7 = 196 vision tokens
+  lora_rank: 16
+  lora_alpha: 32.0
+  head_hidden: 2048
+  dropout: 0.3
+
+training:
+  epochs: 25
+  lr: 1.5e-4                        # slightly higher lr — smaller effective batch flow
+  backbone_lr_scale: 0.0
+  llrd_factor: 1.0
+  batch_size: 2
+  grad_accum_steps: 8               # effective batch 16
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
