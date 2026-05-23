@@ -34,6 +34,27 @@ if not getattr(_il_util, "_trk_flash_attn_patched", False):
     _il_util.find_spec = _patched_find_spec
     _il_util._trk_flash_attn_patched = True
 
+# ── transformers compat shim ─────────────────────────────────────────────────
+# `apply_chunking_to_forward` was moved out of transformers.modeling_utils
+# somewhere between 4.30 and 5.x. OpenGVLab/InternVideo2-Stage2_6B custom code
+# still imports it from the old location and crashes with ImportError at
+# AutoModel.from_pretrained time. Re-expose it under modeling_utils if missing
+# so trust_remote_code models from that era still load.
+try:
+    import transformers.modeling_utils as _tmu
+    if not hasattr(_tmu, "apply_chunking_to_forward"):
+        try:
+            from transformers.pytorch_utils import apply_chunking_to_forward as _acf
+            _tmu.apply_chunking_to_forward = _acf
+        except ImportError:
+            try:
+                from transformers.utils.pytorch_utils import apply_chunking_to_forward as _acf
+                _tmu.apply_chunking_to_forward = _acf
+            except ImportError:
+                pass
+except Exception:
+    pass
+
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
