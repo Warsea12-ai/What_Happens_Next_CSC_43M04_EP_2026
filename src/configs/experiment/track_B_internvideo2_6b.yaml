@@ -10,7 +10,11 @@ defaults:
   - override /model: internvideo2
 
 model:
-  backbone: "OpenGVLab/InternVideo2-Stage2_6B"
+  # Was Stage2_6B (multimodal, trust_remote_code 4.x-era, broken under
+  # transformers 5.x). Switched to Stage1-1B-f8-SthSth — pure vision encoder,
+  # non-gated, already SSv2-finetuned. (Despite the file name still saying
+  # "_6b" for backwards compatibility with the experiment name.)
+  backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p-f8-SthSth"
   backbone_dtype: "bfloat16"
   dropout: 0.3
   head_hidden: 2048
@@ -20,10 +24,10 @@ training:
   lr: 5.0e-4
   backbone_lr_scale: 0.0
   llrd_factor: 0.0
-  # 6B at bf16 ~12 GB just for weights; on RTX A4000 16GB (140W) we have
-  # ~4 GB for activations — batch=1 is the only safe choice. Was batch=2.
-  batch_size: 1
-  grad_accum_steps: 64       # was 32 — double to keep effective batch=64
+  # 1B at bf16 ~ 2 GB weights → batch=4 with ~3-4 GB activations fits on
+  # RTX A4000 16GB with several GB of headroom.
+  batch_size: 4
+  grad_accum_steps: 16       # effective batch = 64
   weight_decay: 5.0e-4
   label_smoothing: 0.05      # lower per wandb correlation analysis (rho=-0.43)
   warmup_epochs: 5

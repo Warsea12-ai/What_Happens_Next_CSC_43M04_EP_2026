@@ -22,11 +22,15 @@ defaults:
   - override /model: internvideo2_pairs
 
 model:
-  # Stage2 1B variant is gated on HF (401); Stage2_6B is public — use frozen body
-  # + LoRA so a 12 GB-weight backbone still fits on a 20 GB power130 GPU.
-  backbone: "OpenGVLab/InternVideo2-Stage2_6B"
+  # Stage2_6B is multimodal (vision+text+tokenizer) and its trust_remote_code
+  # modeling is 4.x-era — fundamentally incompatible with transformers 5.x
+  # despite our compat shim. Switching to Stage1-1B-224p-f8-SthSth:
+  #   - non-gated, vision-only (no tokenizer/text-encoder cruft),
+  #   - 1B params (~2 GB bf16) leaves comfortable headroom on 16 GB,
+  #   - already fine-tuned on Something-Something v2 (our exact domain).
+  backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p-f8-SthSth"
   backbone_dtype: "bfloat16"
-  use_lora: false           # LoRA on 6B trust_remote_code is unreliable; full freeze is safer here
+  use_lora: false
   lora_rank: 0
   lora_alpha: 0.0
   perceiver_heads: 8
@@ -40,8 +44,10 @@ training:
   lr: 1.0e-4
   backbone_lr_scale: 0.05
   llrd_factor: 0.0          # disabled: backbone is frozen
-  batch_size: 1             # 6B at bf16 ~12 GB weights leaves <8 GB for activations
-  grad_accum_steps: 32      # effective batch size = 32
+  # 1B at bf16 ~ 2 GB weights + ~3-4 GB activations leaves plenty of room
+  # at batch=4 on RTX A4000 16GB.
+  batch_size: 4
+  grad_accum_steps: 8       # effective batch size = 32
   weight_decay: 5.0e-4
   label_smoothing: 0.1
   warmup_epochs: 8
