@@ -286,9 +286,17 @@ class Qwen25VL3BVideo(nn.Module):
         # 5. Vision tower forward — grid_thw is the same for every video in the batch
         grid_thw = torch.tensor([[Tp, Hp, Wp]] * B,
                                 device=patches.device, dtype=torch.long)
-        # visual returns (total_merged_tokens, llm_hidden) — already projected to LLM dim
+        # visual returns either a raw tensor (older HF) or BaseModelOutputWithPooling
+        # (transformers 5.x). The interesting payload is the post-merger tokens —
+        # carried by `last_hidden_state` when wrapped.
         with torch.no_grad():
-            vis_seq = self.visual(patches, grid_thw=grid_thw)  # (B * merged_per_vid, llm_hidden)
+            vis_out = self.visual(patches, grid_thw=grid_thw)
+        if isinstance(vis_out, torch.Tensor):
+            vis_seq = vis_out
+        else:
+            vis_seq = getattr(vis_out, "last_hidden_state", None)
+            if vis_seq is None:
+                vis_seq = vis_out[0] if isinstance(vis_out, (tuple, list)) else vis_out
 
         # The merger does spatial 2×2 pooling: merged_per_vid = Tp * (Hp/2) * (Wp/2)
         merged_per_vid = vis_seq.shape[0] // B
