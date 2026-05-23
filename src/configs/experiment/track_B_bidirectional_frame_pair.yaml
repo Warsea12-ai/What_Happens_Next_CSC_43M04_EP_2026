@@ -23,11 +23,13 @@ training:
   epochs: 60
   lr: 3.0e-4
   # Same Qwen2-VL-2B backbone as qwen_temporal_attn, but with 2× cross-attention
-  # streams this head needs more activation memory. batch=8 OOM'd in Adam.step()
-  # on hongrie (16GB) at the very first optimizer step. Halve again to batch=4
-  # and double accum to 16 to keep effective batch=64.
-  batch_size: 4
-  grad_accum_steps: 16
+  # streams this head needs more activation memory. batch=4 OOM'd a second time
+  # in Adam.step() on hongrie (16GB) — Adam needed 200MB and the allocator was
+  # fragmented. With train_trackB now setting PYTORCH_CUDA_ALLOC_CONF=
+  # expandable_segments:True, batch=2 + grad_accum=32 gives Adam.step the head
+  # room it needs while keeping effective batch=64.
+  batch_size: 2
+  grad_accum_steps: 32
   weight_decay: 1.0e-4
   label_smoothing: 0.05      # lower per wandb correlation analysis (rho=-0.43)
   warmup_epochs: 5

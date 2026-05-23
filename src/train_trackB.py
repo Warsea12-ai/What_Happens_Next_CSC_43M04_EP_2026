@@ -14,6 +14,14 @@ Run from src/::
 
 from __future__ import annotations
 
+# ── Reduce CUDA allocator fragmentation ──────────────────────────────────────
+# Several tight-VRAM runs (Qwen2-VL-2B at 16GB) OOM in Adam.step() with
+# hundreds of MB reserved-but-unallocated. expandable_segments lets the
+# allocator grow segments dynamically instead of fragmenting. Must be set
+# BEFORE `import torch` to take effect.
+import os as _os
+_os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 # ── Global flash_attn availability workaround ────────────────────────────────
 # Several trust_remote_code models in this repo (InternVL2.5, InternVideo2,
 # Qwen2.5-VL, …) instantiate Qwen2ForCausalLM directly, triggering
@@ -35,25 +43,80 @@ if not getattr(_il_util, "_trk_flash_attn_patched", False):
     _il_util._trk_flash_attn_patched = True
 
 # ── transformers compat shim ─────────────────────────────────────────────────
-# `apply_chunking_to_forward` was moved out of transformers.modeling_utils
-# somewhere between 4.30 and 5.x. OpenGVLab/InternVideo2-Stage2_6B custom code
-# still imports it from the old location and crashes with ImportError at
-# AutoModel.from_pretrained time. Re-expose it under modeling_utils if missing
-# so trust_remote_code models from that era still load.
-try:
+# OpenGVLab/InternVideo2-Stage2_6B (and other trust_remote_code models from
+# the transformers 4.x era) import these three helpers from
+# transformers.modeling_utils. In 5.x they were either relocated to
+# transformers.pytorch_utils or removed outright. We restore them under the
+# expected path so the custom code can `from transformers.modeling_utils
+# import (apply_chunking_to_forward, find_pruneable_heads_and_indices,
+# prune_linear_layer)` without raising ImportError.
+def _install_transformers_compat_shim():
     import transformers.modeling_utils as _tmu
+    import torch as _torch
+    import torch.nn as _nn
+
+    # 1) apply_chunking_to_forward — still in transformers.pytorch_utils on 5.x
     if not hasattr(_tmu, "apply_chunking_to_forward"):
         try:
             from transformers.pytorch_utils import apply_chunking_to_forward as _acf
             _tmu.apply_chunking_to_forward = _acf
         except ImportError:
-            try:
-                from transformers.utils.pytorch_utils import apply_chunking_to_forward as _acf
-                _tmu.apply_chunking_to_forward = _acf
-            except ImportError:
-                pass
-except Exception:
-    pass
+            def apply_chunking_to_forward(forward_fn, chunk_size, chunk_dim, *input_tensors):
+                if chunk_size <= 0 or not input_tensors or not isinstance(input_tensors[0], _torch.Tensor):
+                    return forward_fn(*input_tensors)
+                num_chunks = (input_tensors[0].shape[chunk_dim] + chunk_size - 1) // chunk_size
+                input_chunks = tuple(
+                    t.chunk(num_chunks, dim=chunk_dim) if isinstance(t, _torch.Tensor) else (t,) * num_chunks
+                    for t in input_tensors
+                )
+                output_chunks = [forward_fn(*chunk) for chunk in zip(*input_chunks)]
+                return _torch.cat(output_chunks, dim=chunk_dim)
+            _tmu.apply_chunking_to_forward = apply_chunking_to_forward
+
+    # 2) prune_linear_layer — still in transformers.pytorch_utils on 5.x
+    if not hasattr(_tmu, "prune_linear_layer"):
+        try:
+            from transformers.pytorch_utils import prune_linear_layer as _pll
+            _tmu.prune_linear_layer = _pll
+        except ImportError:
+            def prune_linear_layer(layer, index, dim=0):
+                index = index.to(layer.weight.device)
+                W = layer.weight.index_select(dim, index).clone().detach()
+                b = None
+                if layer.bias is not None:
+                    b = layer.bias.clone().detach() if dim == 1 else layer.bias[index].clone().detach()
+                new_size = list(layer.weight.size())
+                new_size[dim] = len(index)
+                new_layer = _nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
+                new_layer.weight.requires_grad = False
+                new_layer.weight.copy_(W.contiguous())
+                new_layer.weight.requires_grad = True
+                if b is not None:
+                    new_layer.bias.requires_grad = False
+                    new_layer.bias.copy_(b.contiguous())
+                    new_layer.bias.requires_grad = True
+                return new_layer
+            _tmu.prune_linear_layer = prune_linear_layer
+
+    # 3) find_pruneable_heads_and_indices — removed in 5.x entirely.
+    # Local re-implementation matching the original transformers behaviour.
+    if not hasattr(_tmu, "find_pruneable_heads_and_indices"):
+        def find_pruneable_heads_and_indices(heads, n_heads, head_size, already_pruned_heads):
+            mask = _torch.ones(n_heads, head_size)
+            heads = set(heads) - already_pruned_heads
+            for head in heads:
+                head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+                mask[head] = 0
+            mask = mask.view(-1).contiguous().eq(1)
+            index = _torch.arange(len(mask))[mask].long()
+            return heads, index
+        _tmu.find_pruneable_heads_and_indices = find_pruneable_heads_and_indices
+
+try:
+    _install_transformers_compat_shim()
+except Exception as _e:
+    # Don't take down the whole training script if the shim can't install.
+    print(f"[shim] transformers compat shim install failed: {_e}")
 
 import math
 from pathlib import Path
