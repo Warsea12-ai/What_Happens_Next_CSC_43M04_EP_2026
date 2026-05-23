@@ -17,6 +17,7 @@ dependencies = [
     "ms-swift>=4.2.0",
     "qwen-vl-utils>=0.0.6",
     "decord>=0.6.0",
+    "wandb>=0.19.0",
 ]
 
 [tool.uv]
