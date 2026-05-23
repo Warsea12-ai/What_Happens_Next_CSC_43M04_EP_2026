@@ -1,0 +1,12 @@
+name: internvideo2_pairs
+num_classes: 33
+backbone: "OpenGVLab/InternVideo2-Stage2-1B-224p"
+backbone_dtype: "bfloat16"
+use_lora: true
+lora_rank: 16
+lora_alpha: 32.0
+perceiver_heads: 8
+n_temporal_layers: 3
+n_heads: 8
+dropout: 0.25
+head_hidden: 2048

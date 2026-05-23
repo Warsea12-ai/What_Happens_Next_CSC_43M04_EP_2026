@@ -1,0 +1,64 @@
+# @package _global_
+# LLaVA-NeXT-Video-7B (Mistral-7B + CLIP-L) — biggest pure-bf16 LLM that fits an A5000.
+#
+# Architecture: see models/llava_mistral_video.py
+#   - Mistral-7B language model (frozen) + LoRA(rank=16) on q_proj/v_proj
+#   - CLIP-L-336 vision tower (frozen)
+#   - Pretrained multi-modal projector (frozen) — reused verbatim
+#   - 1 learnable [TASK_CLS] embedding prepended to the 2304 vision tokens
+#   - Pool last token's hidden state → MLP head → 33 classes
+#
+# Memory budget on A5000 (24 GB):
+#   Mistral-7B bf16 weights              ~14.0 GB  (frozen)
+#   CLIP-L bf16 weights                  ~ 0.6 GB  (frozen)
+#   MM projector bf16 weights            ~ 0.05 GB (frozen)
+#   LoRA + [TASK_CLS] + head fp32         ~ 0.10 GB
+#   AdamW (m+v) on trainables             ~ 0.20 GB
+#   Activations @ batch=1 + grad-ckpt    ~ 1.5 GB
+#   ────────────────────────────────────────────────
+#   total                                ~16-17 GB  (comfortable, leaves room for batch=2)
+#
+# If OOM strikes: lower batch_size to 1 (already low) and confirm
+# use_gradient_checkpointing: true is honoured.
+defaults:
+  - override /model: llava_mistral_video
+
+model:
+  backbone: "llava-hf/LLaVA-NeXT-Video-7B-hf"
+  lora_rank: 16
+  lora_alpha: 32.0
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "v_proj"]
+  head_hidden: 2048
+  dropout: 0.3
+  use_gradient_checkpointing: true
+
+training:
+  epochs: 40
+  # LR groups built by train_trackB.build_optimizer:
+  #   head_parameters() → lr (1e-4)
+  #   lora_parameters() → lr * backbone_lr_scale (1e-5)
+  lr: 1.0e-4
+  backbone_lr_scale: 0.1
+  llrd_factor: 0.0                # disabled — backbone is frozen apart from LoRA
+  batch_size: 2
+  grad_accum_steps: 16            # effective batch = 32
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 4
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.25            # gentle — LLM is sensitive to distribution shift
+  blur_prob: 0.05
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  # Logging every gradient histogram on a 7B model is heavy; keep watch off.
+  wandb_watch: false
+
+  num_workers: 2                  # PEFT + LoRA + grad-ckpt CPU overhead — keep modest

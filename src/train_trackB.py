@@ -55,6 +55,8 @@ from models.internvit6b_temporal import InternViT6BTemporal
 from models.internvit6b_pairwise import InternViT6BPairwise
 from models.vjepa2_variants import VJEPA2Variant
 from models.internvideo2 import InternVideo2
+from models.internvideo2_pairs import InternVideo2Pairs
+from models.llava_mistral_video import LlavaMistralVideo
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 
@@ -410,6 +412,32 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.3)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
             backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
+        )
+    if name == "llava_mistral_video":
+        return LlavaMistralVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "llava-hf/LLaVA-NeXT-Video-7B-hf")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            lora_dropout=float(cfg.model.get("lora_dropout", 0.05)),
+            target_modules=tuple(cfg.model.get("target_modules", ("q_proj", "v_proj"))),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
+        )
+    if name == "internvideo2_pairs":
+        return InternVideo2Pairs(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "OpenGVLab/InternVideo2-Stage2-1B-224p")),
+            backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
+            use_lora=bool(cfg.model.get("use_lora", True)),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            perceiver_heads=int(cfg.model.get("perceiver_heads", 8)),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 3)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
         )
     if name == "internvl2_classifier":
         return InternVL2Classifier(

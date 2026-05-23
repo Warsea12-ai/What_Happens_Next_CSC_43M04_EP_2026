@@ -1,0 +1,62 @@
+# @package _global_
+# InternVideo2-Stage2-1B + Perceiver pool + Cross-Attention Pairs.
+#
+# Heavy model targeted at a single RTX 3090 (24 GB). Combines:
+#   - Newer/bigger backbone (InternVideo2 1B vs VideoMAE-base 86M / large 307M).
+#     Multi-objective pretraining on 75M videos (masked + contrastive + UMT
+#     distillation), then K710/SSv2 finetuned.
+#   - The winning head pattern (spatial cross-attention pairs) from the current
+#     Track B best (videomae_ssv2_cross_attn_pairs, 46.39%), generalised via a
+#     Perceiver pool so it works on any backbone token layout.
+#
+# Memory budget on RTX 3090 (rough):
+#   backbone bf16 weights      ~ 2.0 GB   (frozen, no optim state)
+#   LoRA + head fp32 weights   ~ 0.4 GB   (~80 M trainable params)
+#   AdamW (m+v) on trainables  ~ 0.6 GB
+#   activations @ batch=4      ~ 3-4 GB   (8 frames, ~30 layers, bf16 autocast)
+#   ─────────────────────────────────────
+#   total                      ~ 7-8 GB   (comfortably under 24 GB)
+#
+# If OOM strikes, lower batch_size to 2 and raise grad_accum_steps to 16.
+defaults:
+  - override /model: internvideo2_pairs
+
+model:
+  backbone: "OpenGVLab/InternVideo2-Stage2-1B-224p"
+  backbone_dtype: "bfloat16"
+  use_lora: true
+  lora_rank: 16
+  lora_alpha: 32.0
+  perceiver_heads: 8
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 60
+  # LR groups (build_optimizer in train_trackB):
+  #   head     → 1.0 e-4
+  #   LoRA     → 1.0 e-4 * backbone_lr_scale = 5.0 e-6
+  #   (no full-backbone group — encoder is frozen apart from LoRA)
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.0          # disabled: backbone is frozen, no per-layer decay needed
+  batch_size: 4
+  grad_accum_steps: 8       # effective batch size = 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.30
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+
+  num_workers: 4
