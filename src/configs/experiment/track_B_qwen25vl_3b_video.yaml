@@ -1,0 +1,44 @@
+# @package _global_
+# Qwen25VL3BVideo — Qwen2.5-VL-3B-Instruct (Alibaba, Jan 2025) as VLM classifier.
+#
+# Bigger (4B total) and more recent than V-JEPA 2 (1B). Tested fit on RTX A4000
+# 16GB (140W bucket): ~10-11 GB peak with batch=1 + grad_accum=16.
+#
+# Key architectural novelty vs existing arsenal:
+#   - Dynamic FPS sampling + 3D rotary positional encoding (designed for video)
+#   - Native vision-language joint pretraining at 2.5 scale
+#   - Newest open VLM family from Alibaba (Jan 2025)
+defaults:
+  - override /model: qwen25vl_3b_video
+
+model:
+  lora_rank: 16
+  lora_alpha: 32.0
+  head_hidden: 2048
+  dropout: 0.3
+  target_frames: 8       # multiple of temporal_patch_size=2
+
+training:
+  epochs: 25
+  lr: 1.0e-4
+  backbone_lr_scale: 0.0  # vision + LLM both frozen except LoRA
+  llrd_factor: 1.0
+  batch_size: 1
+  grad_accum_steps: 16
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+  wandb_watch: false      # disable wandb.watch grad hook (saves ~500MB on big LLMs)
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

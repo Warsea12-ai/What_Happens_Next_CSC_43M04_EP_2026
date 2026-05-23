@@ -1,0 +1,21 @@
+name: internvl25_4b_video
+num_classes: 33
+
+backbone: "OpenGVLab/InternVL2_5-4B"
+cache_dir: "/Data/.hf_cache"
+
+# Vision tower + projector frozen; LoRA on LLM q/v_proj.
+lora_rank: 16
+lora_alpha: 32.0
+lora_dropout: 0.05
+lora_targets: ["q_proj", "v_proj"]
+
+# Classification head
+head_hidden: 2048
+dropout: 0.3
+
+# 0.5 = 4x token compression (4 frames * 256 tokens = 1024 vision tokens).
+# Auto-overridden by config.downsample_ratio at load time if InternVL specifies it.
+pixel_shuffle_scale: 0.5
+
+use_gradient_checkpointing: true

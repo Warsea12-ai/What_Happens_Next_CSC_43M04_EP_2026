@@ -1,0 +1,21 @@
+name: qwen25vl_3b_video
+num_classes: 33
+
+backbone: "Qwen/Qwen2.5-VL-3B-Instruct"
+cache_dir: "/Data/.hf_cache"
+
+# Vision tower frozen; LoRA on LLM q/v_proj carries the task adaptation.
+lora_rank: 16
+lora_alpha: 32.0
+lora_dropout: 0.05
+lora_targets: ["q_proj", "v_proj"]
+
+# Classification head
+head_hidden: 2048
+dropout: 0.3
+
+# Frame upsampling target (must be multiple of Qwen2.5-VL temporal_patch=2).
+# 8 frames @ 224² → 2×16×16 = 512 patches → 128 merged tokens / video.
+target_frames: 8
+
+use_gradient_checkpointing: true

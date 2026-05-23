@@ -58,6 +58,8 @@ from models.internvideo2 import InternVideo2
 from models.internvideo2_pairs import InternVideo2Pairs
 from models.llava_mistral_video import LlavaMistralVideo
 from models.vjepa2_llama3_vlm import VJEPA2Llama3VLM
+from models.qwen25vl_3b_video import Qwen25VL3BVideo
+from models.internvl25_4b_video import InternVL25_4BVideo
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 
@@ -513,6 +515,34 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
+        )
+    if name == "qwen25vl_3b_video":
+        return Qwen25VL3BVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "Qwen/Qwen2.5-VL-3B-Instruct")),
+            cache_dir=str(cfg.model.get("cache_dir", "/Data/.hf_cache")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            lora_dropout=float(cfg.model.get("lora_dropout", 0.05)),
+            lora_targets=tuple(cfg.model.get("lora_targets", ("q_proj", "v_proj"))),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
+            target_frames=int(cfg.model.get("target_frames", 8)),
+        )
+    if name == "internvl25_4b_video":
+        return InternVL25_4BVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "OpenGVLab/InternVL2_5-4B")),
+            cache_dir=str(cfg.model.get("cache_dir", "/Data/.hf_cache")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            lora_dropout=float(cfg.model.get("lora_dropout", 0.05)),
+            lora_targets=tuple(cfg.model.get("lora_targets", ("q_proj", "v_proj"))),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
+            pixel_shuffle_scale=float(cfg.model.get("pixel_shuffle_scale", 0.5)),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 
