@@ -81,19 +81,30 @@ def _linear_upsample(x: torch.Tensor, target_T: int) -> torch.Tensor:
 
 
 def _probe_predictor_hidden(predictor: nn.Module, fallback: int = 384) -> int:
-    """Find the predictor's hidden dimension defensively."""
-    cfg = getattr(predictor, "config", None)
-    for attr in ("predictor_hidden_size", "hidden_size"):
-        if cfg is not None and hasattr(cfg, attr):
-            val = getattr(cfg, attr)
-            if isinstance(val, int) and val > 0:
-                return val
-    # Inspect a block's first Linear to infer dim
+    """Find the predictor's hidden dimension defensively.
+
+    Order of preference (most reliable first):
+      1. First LayerNorm in the first block — that's the dim the predictor
+         actually operates on internally. The HF VJEPA2 config inherits
+         hidden_size from the encoder (1408 for ViT-G), which is WRONG
+         for the predictor stack.
+      2. Explicit `predictor_hidden_size` on the config.
+      3. Fallback.
+    """
     blocks = getattr(predictor, "layer", None) or getattr(predictor, "blocks", None)
     if blocks is not None and len(blocks) > 0:
         for m in blocks[0].modules():
-            if isinstance(m, nn.Linear):
-                return m.in_features
+            if isinstance(m, nn.LayerNorm):
+                shape = m.normalized_shape
+                if isinstance(shape, (tuple, list)) and len(shape) > 0:
+                    return int(shape[0])
+                if isinstance(shape, int):
+                    return int(shape)
+    cfg = getattr(predictor, "config", None)
+    if cfg is not None and hasattr(cfg, "predictor_hidden_size"):
+        val = getattr(cfg, "predictor_hidden_size")
+        if isinstance(val, int) and val > 0:
+            return val
     return fallback
 
 
