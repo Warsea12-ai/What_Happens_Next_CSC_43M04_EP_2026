@@ -1,0 +1,11 @@
+name: vjepa2_vitl_raft
+num_classes: 33
+backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+cache_dir: "/Data/vianney.gauthier/hub"
+num_frozen_blocks: 0
+crop_size: 256
+dropout: 0.1
+head_hidden: 512
+pool_heads: 8
+gradient_checkpointing: false
+raft_iters: 12     # nombre d'itérations du décodeur RAFT (défaut torchvision = 12)

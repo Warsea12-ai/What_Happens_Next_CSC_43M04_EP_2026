@@ -1,0 +1,12 @@
+name: vjepa2_vitg_dup
+num_classes: 33
+backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+cache_dir: "/Data/vianney.gauthier/hub"
+num_frozen_blocks: 0
+crop_size: 256
+dropout: 0.1
+head_hidden: 512
+pool_heads: 8
+# Gradient checkpointing : 40 blocs ViT-G + dégel total → ~22 GB activations
+# en bf16 sans checkpointing. Avec checkpoint → ~11 GB. Indispensable sur 24 GB.
+gradient_checkpointing: true

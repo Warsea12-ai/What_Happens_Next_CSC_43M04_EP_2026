@@ -1,12 +1,17 @@
-"""VJEPA2ViTLDup — V-JEPA 2 ViT-L (~300M, SSv2-finetuned) + frames dupliquées + dégel doux.
+"""VJEPA2ViTLDup — V-JEPA 2 (ViT-L ou ViT-G, SSv2-finetuned) + frames dupliquées + dégel doux.
+
+Initialement conçu pour ViT-L (~300M, hidden=1024), mais la classe auto-détecte
+le ``hidden_dim`` depuis l'encodeur, donc fonctionne identiquement avec :
+  - ViT-L : facebook/vjepa2-vitl-fpc16-256-ssv2  (24 blocs, hidden=1024)
+  - ViT-G : facebook/vjepa2-vitg-fpc64-384-ssv2  (40 blocs, hidden=1408)
 
 Architecture (cf. slide « V-JEPA 2 × ViT-Large ») :
     Vidéo d'entrée (B, 4, 3, H, W)
       → Duplication 4 → 16 frames (chaque frame répétée 4 fois)
-      → Tubelet Embedding              → 2048 tokens × 1024
-      → Encoder Transformer ViT-L       (24 couches, hidden=1024)
-      → Attentive Pooler                (2048 tokens → 1 × 1024)
-      → Tête MLP  1024 → 512 → 33
+      → Tubelet Embedding              → ≈2048 tokens × hidden
+      → Encoder Transformer V-JEPA 2    (24 ou 40 couches)
+      → Attentive Pooler                (tokens → 1 × hidden)
+      → Tête MLP  hidden → head_hidden → num_classes
 
 Méthode (« Frames dupliquées + dégel doux ») :
   1. 16 frames (4 dupliquées) — au lieu de restreindre à 4 frames en entrée,
@@ -15,13 +20,12 @@ Méthode (« Frames dupliquées + dégel doux ») :
   2. Dégel doux : tous les blocs entraînables, LR backbone ×0.03 (sinon overfit).
      Le scaling backbone passe par layerwise_lr_groups → un seul groupe backbone
      uniforme (pas de LLRD inter-blocs ici, le dégel doux suffit).
-  3. Tête compacte (1024→512→33) volontairement plus petite que VJEPA2Head
-     (1408→2048→33) parce que ViT-L sort déjà des features bien séparables
-     post-fine-tuning SSv2.
+  3. Tête compacte (hidden→head_hidden→classes) parce que ViT-L/G sort déjà
+     des features bien séparables post-fine-tuning SSv2.
 
 Note résolution : la slide indique 256×256 mais le pipeline produit 224×224.
 V-JEPA 2 interpole dynamiquement les position embeddings, donc on charge avec
-crop_size=224 pour aligner d'entrée les paramètres.
+crop_size=cfg.model.crop_size pour aligner d'entrée les paramètres.
 """
 from __future__ import annotations
 
@@ -75,9 +79,11 @@ class VJEPA2ViTLDup(nn.Module):
         dropout:           float = 0.1,
         head_hidden:       int   = 512,
         pool_heads:        int   = 8,
+        gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
         self.num_frozen_blocks = num_frozen_blocks
+        self.gradient_checkpointing = gradient_checkpointing
 
         full = VJEPA2Model.from_pretrained(
             backbone,
@@ -98,7 +104,9 @@ class VJEPA2ViTLDup(nn.Module):
             for p in block.parameters():
                 p.requires_grad = (i >= num_frozen_blocks)
 
-        hidden = 1024  # ViT-L hidden dimension
+        # Auto-détection du hidden_dim (1024 pour ViT-L, 1408 pour ViT-G…).
+        # encoder.config.hidden_size est l'attribut canonique des VJEPA2Encoder.
+        hidden = int(getattr(self.encoder.config, "hidden_size", 1024))
 
         self.pool = _AttentionPool(hidden, n_heads=pool_heads)
         self.head = nn.Sequential(
@@ -114,8 +122,9 @@ class VJEPA2ViTLDup(nn.Module):
         n_frozen = sum(p.numel() for p in self.parameters() if not p.requires_grad)
         n_train  = sum(p.numel() for p in self.parameters() if p.requires_grad)
         n_blocks = len(self.encoder.layer)
-        print(f"VJEPA2ViTLDup: {n_frozen/1e6:.0f}M frozen, {n_train/1e6:.1f}M trainable "
-              f"(num_frozen_blocks={num_frozen_blocks}/{n_blocks})")
+        print(f"VJEPA2ViTLDup[hidden={hidden}, blocks={n_blocks}]: "
+              f"{n_frozen/1e6:.0f}M frozen, {n_train/1e6:.1f}M trainable "
+              f"(num_frozen_blocks={num_frozen_blocks}, grad_ckpt={gradient_checkpointing})")
 
     def train(self, mode: bool = True):
         super().train(mode)
@@ -143,9 +152,14 @@ class VJEPA2ViTLDup(nn.Module):
             groups.append({"params": bb, "lr": backbone_lr})
         return groups
 
+    def _prepare_clip(self, x: torch.Tensor) -> torch.Tensor:
+        """Hook surchargeable pour les variantes (RAFT, etc.). Par défaut : duplication."""
+        return _duplicate_frames(x, _TARGET_FRAMES)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Duplication temporelle 4 → 16 (cf. slide « 16 frames (4 dupliquées) »)
-        x = _duplicate_frames(x, _TARGET_FRAMES)
+        # Préparation de la séquence 4 → 16 frames (duplication par défaut,
+        # ou warp RAFT dans la sous-classe VJEPA2RaftDup).
+        x = self._prepare_clip(x)
 
         # Frozen part (si num_frozen_blocks > 0) en no_grad pour économiser
         # les activations ; sinon tout est en autograd dès le premier bloc.
@@ -160,8 +174,16 @@ class VJEPA2ViTLDup(nn.Module):
             h = self.encoder.embeddings(pixel_values_videos=x)
             blocks = self.encoder.layer
 
-        for block in blocks:
-            h = block(h)[0]
+        # Gradient checkpointing : indispensable pour ViT-G (40 blocs, 1B params)
+        # sur 24 GB GPU. Trade-off ~30% de temps train pour ~2× moins d'activations.
+        if self.gradient_checkpointing and self.training:
+            for block in blocks:
+                h = torch.utils.checkpoint.checkpoint(
+                    lambda x, blk=block: blk(x)[0], h, use_reentrant=False,
+                )
+        else:
+            for block in blocks:
+                h = block(h)[0]
 
-        feat = self.pool(h)              # (B, 1024)
+        feat = self.pool(h)              # (B, hidden)
         return self.head(feat)           # (B, num_classes)

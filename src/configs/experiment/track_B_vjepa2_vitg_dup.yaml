@@ -1,0 +1,48 @@
+# @package _global_
+# (A) V-JEPA 2 × ViT-G + Frames dupliquées + dégel doux
+#
+# Variante "scale-up" du track_B_vjepa2_vitl_dup :
+#   - Backbone ViT-G 1B params (vs 300M pour ViT-L) — même domaine SSv2.
+#   - Tous les 40 blocs entraînables (vs 8/40 dans vjepa2_head actuel).
+#   - LR backbone × 0.03 (dégel doux uniforme).
+#   - Attentive pooler + tête compacte 1408→512→33.
+#   - Gradient checkpointing activé : passe de ~22 GB à ~11 GB activations
+#     en bf16, indispensable pour tenir sur 24 GB GPU (RTX 3090 / A5000).
+#
+# Hôte recommandé : fish (3090, 24 GB) — raie ou labre (20.8 GB libres au lancement).
+defaults:
+  - override /model: vjepa2_vitg_dup
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 0
+  crop_size: 256
+  dropout: 0.1
+  head_hidden: 512
+  pool_heads: 8
+  gradient_checkpointing: true
+
+training:
+  epochs: 25
+  lr: 1.0e-4
+  backbone_lr_scale: 0.03      # « LR backbone ×0,03, sinon il overfit »
+  llrd_factor: 1.0             # dégel doux uniforme (pas de LLRD par bloc)
+  batch_size: 2                # ViT-G + 16 frames + grad_ckpt → batch=2 sur 24 GB
+  grad_accum_steps: 32         # effective batch 64
+  optimizer: adamw
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.4

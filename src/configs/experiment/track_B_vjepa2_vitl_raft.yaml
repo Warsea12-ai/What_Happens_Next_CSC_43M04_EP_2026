@@ -1,0 +1,53 @@
+# @package _global_
+# (E) V-JEPA 2 ViT-L + Frame interpolation RAFT (au lieu de duplication statique)
+#
+# Variante de track_B_vjepa2_vitl_dup où la duplication "[A,A,A,A,B,B,B,B,…]"
+# est remplacée par une interpolation temporelle :
+#   - On calcule le flow optique RAFT entre paires (A→B), (B→C), (C→D).
+#   - On warpe A à α=¼·flow, α=½·flow, α=¾·flow → 3 frames synthétiques.
+#   - Résultat : 16 frames "[A, a₁, a₂, a₃, B, b₁, b₂, b₃, …]" avec du *vrai*
+#     mouvement dans chaque tubelet (tubelet_size=2). Match plus fidèle avec
+#     la distribution SSv2 sur laquelle V-JEPA 2 a été pré-entraîné.
+#
+# RAFT (~5M params, frozen, eval) ajoute ~30 ms / batch → impact négligeable
+# face au forward ViT-L (~200 ms).
+#
+# Hôte recommandé : bird (A5000, 24 GB) ou fish libre. Pas plus exigeant en
+# VRAM que vjepa2_vitl_dup (RAFT en bf16, frozen → activations modestes).
+defaults:
+  - override /model: vjepa2_vitl_raft
+
+model:
+  backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+  num_frozen_blocks: 0
+  crop_size: 256
+  dropout: 0.1
+  head_hidden: 512
+  pool_heads: 8
+  gradient_checkpointing: false
+  raft_iters: 12
+
+training:
+  epochs: 30
+  lr: 1.0e-4
+  backbone_lr_scale: 0.03
+  llrd_factor: 1.0
+  batch_size: 4
+  grad_accum_steps: 16        # effective batch 64
+  optimizer: adamw
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.4

@@ -58,6 +58,8 @@ _TRACK_B_MODELS = {
     "internvit6b_pairwise",
     "vjepa2_variants",
     "vjepa2_vitl_dup",
+    "vjepa2_vitg_dup",
+    "vjepa2_vitl_raft",
 }
 
 

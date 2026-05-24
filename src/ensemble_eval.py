@@ -31,11 +31,10 @@ from torch.utils.data import DataLoader
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from utils import build_transforms, set_seed
 import train as _train_a
-
-_TRACK_B_MODELS = {
-    "videomae", "motion_videomae", "frozen_videomae",
-    "swin3d_finetune", "vit_temporal", "qwen_vl_video",
-}
+# Source de vérité unique pour la liste des modèles Track B (sinon les nouveaux
+# checkpoints — vjepa2_vitl_dup, vjepa2_vitg_dup, vjepa2_vitl_raft, etc. — sont
+# routés vers train.py:build_model qui ne les connaît pas).
+from evaluate import _TRACK_B_MODELS
 
 
 def _build_model(cfg, checkpoint: dict, device: torch.device) -> nn.Module:
