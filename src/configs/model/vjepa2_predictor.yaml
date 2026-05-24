@@ -1,0 +1,23 @@
+name: vjepa2_predictor
+num_classes: 33
+
+backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+cache_dir: null            # uses HF_HOME by default
+
+# Future-query bank fed to the predictor stack along with encoded context.
+# 128 ≈ Tp(6 future patches) × spatial 7×7 after a 2x merge — keeps the
+# refined sequence short enough to fit easily.
+n_future_queries: 128
+
+# Predictor : LoRA fine-tune on q/k/v/dense by default. Set
+# train_predictor_full=true if you'd rather unfreeze the whole stack.
+use_lora: true
+lora_rank: 16
+lora_alpha: 32.0
+lora_dropout: 0.05
+lora_targets: ["query", "key", "value", "dense"]
+train_predictor_full: false
+
+# Head : MLP from [present_pool ; future_pool] (2 * predictor_hidden).
+head_hidden: 2048
+dropout: 0.25

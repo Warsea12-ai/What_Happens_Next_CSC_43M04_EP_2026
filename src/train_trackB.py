@@ -651,6 +651,22 @@ def build_model(cfg: DictConfig) -> nn.Module:
             lora_alpha=float(cfg.model.get("lora_alpha", 16.0)),
             scale_indices=tuple(cfg.model.get("scale_indices", (6, 9, 12))),
         )
+    if name == "vjepa2_predictor":
+        from models.vjepa2_predictor import VJEPA2PredictorAnticipator
+        return VJEPA2PredictorAnticipator(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitg-fpc64-384-ssv2")),
+            cache_dir=cfg.model.get("cache_dir", None),
+            n_future_queries=int(cfg.model.get("n_future_queries", 128)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            use_lora=bool(cfg.model.get("use_lora", True)),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            lora_dropout=float(cfg.model.get("lora_dropout", 0.05)),
+            lora_targets=tuple(cfg.model.get("lora_targets", ("query", "key", "value", "dense"))),
+            train_predictor_full=bool(cfg.model.get("train_predictor_full", False)),
+        )
     if name == "vjepa2_llama3_vlm":
         return VJEPA2Llama3VLM(
             num_classes=int(cfg.model.num_classes),

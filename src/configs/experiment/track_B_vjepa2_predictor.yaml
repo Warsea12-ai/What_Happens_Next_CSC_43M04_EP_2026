@@ -1,0 +1,47 @@
+# @package _global_
+# VJEPA2PredictorAnticipator — exploits V-JEPA 2's predictor (normally
+# discarded in vjepa2_head.py) as a "what happens next" anticipator.
+#
+# Encoder (frozen) processes 4 observed frames; the predictor stack is
+# applied to [encoded_context ; learnable_future_queries] and the result is
+# pooled into [present_feat ; future_feat] for classification. The predictor's
+# pretrained weights — trained to fill in masked SSv2 patches from context —
+# already encode hand-object motion dynamics aligned with the challenge.
+#
+# Memory : ~5-7 GB bf16 on RTX 3090/4000 Ada at batch=4 + grad_accum=8.
+defaults:
+  - override /model: vjepa2_predictor
+
+model:
+  n_future_queries: 128
+  use_lora: true
+  lora_rank: 16
+  head_hidden: 2048
+  dropout: 0.25
+  train_predictor_full: false
+
+training:
+  epochs: 25
+  lr: 1.5e-4               # head + LoRA + future_queries share this LR
+  backbone_lr_scale: 0.0   # encoder frozen, predictor handled via LoRA
+  llrd_factor: 1.0
+  batch_size: 4
+  grad_accum_steps: 8      # effective batch = 32
+  weight_decay: 0.05
+  label_smoothing: 0.05    # lower per sweep correlation analysis (rho=-0.43)
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+  wandb_watch: false       # disable grad-mirror hook (saves memory on big encoder)
+
+  use_random_resized_crop: true
+  rrc_scale_min: 0.9       # mild crop only (≥90% of frame kept)
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
