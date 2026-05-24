@@ -192,6 +192,7 @@ from models.vjepa2_variants import VJEPA2Variant
 from models.vjepa2_vitl_dup import VJEPA2ViTLDup
 from models.internvideo2 import InternVideo2
 from models.internvideo2_pairs import InternVideo2Pairs
+from models.timesformer_head import TimesformerHead
 from models.llava_mistral_video import LlavaMistralVideo
 from models.vjepa2_llama3_vlm import VJEPA2Llama3VLM
 from models.qwen25vl_3b_video import Qwen25VL3BVideo
@@ -575,6 +576,14 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.3)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
             backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
+        )
+    if name == "timesformer_head":
+        return TimesformerHead(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/timesformer-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 0)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
         )
     if name == "llava_mistral_video":
         return LlavaMistralVideo(
