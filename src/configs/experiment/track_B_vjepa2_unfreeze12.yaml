@@ -1,0 +1,39 @@
+# @package _global_
+# V-JEPA 2 — pari capacité : seulement 12 blocs gelés (vs 24 winner) avec
+# régularisation lourde (drop_path 0.20, dropout 0.35, label_smoothing 0.15,
+# WD 0.02). Hypothèse : le 0.61 evaluate vs 0.72 val_train est un gap de
+# généralisation que plus de capacité d'adaptation peut résorber SI la reg
+# tient. 350W (24GB) permet d'absorber 28 blocs trainables en batch 4.
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 12
+  dropout: 0.35
+  head_hidden: 2048
+  drop_path_rate: 0.20
+
+training:
+  epochs: 18
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.85
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 0.02
+  label_smoothing: 0.15
+  warmup_epochs: 4
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
