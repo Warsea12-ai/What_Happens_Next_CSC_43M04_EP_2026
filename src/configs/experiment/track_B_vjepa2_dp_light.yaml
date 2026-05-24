@@ -1,0 +1,39 @@
+# @package _global_
+# V-JEPA 2 — recette winner (golden-water-5 = 72.14%) + drop_path léger + dropout 0.30 + early stop.
+# Base : track_B_vjepa2_h100 (24 frozen, batch 8, LLRD 0.85). best était à ep 10/25,
+# val dégradait après → overfitting du backbone partiellement débloqué.
+# Cible : drop_path=0.10 sur 16 blocs trainables (linear 0→0.10) + dropout 0.30
+# (vs 0.25 base) + epochs=15 (stop avant la dégradation). But : >72% val_acc.
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 24
+  dropout: 0.30
+  head_hidden: 2048
+  drop_path_rate: 0.10
+
+training:
+  epochs: 15
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.85
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 0.01
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

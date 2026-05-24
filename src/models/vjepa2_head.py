@@ -49,6 +49,38 @@ from transformers import VJEPA2Model
 _TARGET_FRAMES = 16
 
 
+class _DropPathBlock(nn.Module):
+    """Wraps a VJEPA2 transformer block to apply per-sample stochastic depth on
+    its residual contribution. At eval (or drop_prob=0) → passthrough.
+
+    Standard ViT regularization : in train, for each sample, the block's residual
+    update is randomly zeroed with probability drop_prob, then rescaled by 1/(1-p).
+    Per-sample mask (not per-batch) so larger batches still see all blocks contribute.
+    """
+
+    def __init__(self, block: nn.Module, drop_prob: float) -> None:
+        super().__init__()
+        self.block = block
+        self.drop_prob = float(drop_prob)
+
+    def forward(self, hidden_states: torch.Tensor, *args, **kwargs):
+        if not self.training or self.drop_prob <= 0.0:
+            return self.block(hidden_states, *args, **kwargs)
+        out = self.block(hidden_states, *args, **kwargs)
+        if isinstance(out, tuple):
+            head = out[0]
+            tail = out[1:]
+        else:
+            head, tail = out, ()
+        residual = head - hidden_states  # contribution propre de ce block
+        keep = 1.0 - self.drop_prob
+        mask_shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        mask = (torch.rand(mask_shape, dtype=hidden_states.dtype,
+                            device=hidden_states.device) < keep).to(hidden_states.dtype) / keep
+        new_head = hidden_states + residual * mask
+        return (new_head,) + tail if tail else new_head
+
+
 def _linear_upsample(x: torch.Tensor, target_T: int) -> torch.Tensor:
     B, T, C, H, W = x.shape
     if T == target_T:
@@ -72,9 +104,11 @@ class VJEPA2Head(nn.Module):
         num_frozen_blocks: int = 32,
         dropout: float = 0.25,
         head_hidden: int = 2048,
+        drop_path_rate: float = 0.0,
     ) -> None:
         super().__init__()
         self.num_frozen_blocks = num_frozen_blocks
+        self.drop_path_rate = float(drop_path_rate)
 
         # Load full VJEPA2Model then keep only the encoder (discard the JEPA predictor)
         full = VJEPA2Model.from_pretrained(
@@ -93,6 +127,17 @@ class VJEPA2Head(nn.Module):
         for i, block in enumerate(self.encoder.layer):
             for p in block.parameters():
                 p.requires_grad = (i >= num_frozen_blocks)
+
+        # Stochastic depth (drop_path) sur les blocs trainables uniquement.
+        # Linear scaling 0 → drop_path_rate sur la profondeur trainable.
+        if self.drop_path_rate > 0.0:
+            trainable_idx = list(range(num_frozen_blocks, len(self.encoder.layer)))
+            n_train_blocks = len(trainable_idx)
+            for j, idx in enumerate(trainable_idx):
+                # rate linéaire : premier trainable bloc = 0, dernier = drop_path_rate
+                rate = self.drop_path_rate * j / max(1, n_train_blocks - 1)
+                self.encoder.layer[idx] = _DropPathBlock(self.encoder.layer[idx], rate)
+            print(f"  DropPath activé : linear 0 → {self.drop_path_rate:.2f} sur {n_train_blocks} blocs trainables")
 
         hidden = 1408  # ViT-G hidden dimension
 

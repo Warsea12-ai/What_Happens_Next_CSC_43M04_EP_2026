@@ -189,6 +189,7 @@ from models.internvl2_classifier import InternVL2Classifier
 from models.internvit6b_temporal import InternViT6BTemporal
 from models.internvit6b_pairwise import InternViT6BPairwise
 from models.vjepa2_variants import VJEPA2Variant
+from models.vjepa2_vitl_dup import VJEPA2ViTLDup
 from models.internvideo2 import InternVideo2
 from models.internvideo2_pairs import InternVideo2Pairs
 from models.llava_mistral_video import LlavaMistralVideo
@@ -564,6 +565,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 32)),
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
+            drop_path_rate=float(cfg.model.get("drop_path_rate", 0.0)),
         )
     if name == "internvideo2":
         return InternVideo2(
@@ -676,6 +678,17 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.3)),
             use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
             target_frames=int(cfg.model.get("target_frames", 8)),
+        )
+    if name == "vjepa2_vitl_dup":
+        return VJEPA2ViTLDup(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitl-fpc16-256-ssv2")),
+            cache_dir=str(cfg.model.get("cache_dir", "/Data/vianney.gauthier/hub")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 0)),
+            crop_size=int(cfg.model.get("crop_size", 256)),
+            dropout=float(cfg.model.get("dropout", 0.1)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+            pool_heads=int(cfg.model.get("pool_heads", 8)),
         )
     if name == "internvl25_4b_video":
         return InternVL25_4BVideo(
