@@ -25,6 +25,12 @@ import train_trackB as _train_b
 from utils import build_transforms, set_seed
 
 try:
+    from tqdm.auto import tqdm
+except Exception:
+    def tqdm(iterable=None, **kwargs):
+        return iterable if iterable is not None else iter([])
+
+try:
     import wandb
     _WANDB_OK = True
 except Exception as _wandb_err:
@@ -50,6 +56,7 @@ _TRACK_B_MODELS = {
     "internvit6b_temporal",
     "internvit6b_pairwise",
     "vjepa2_variants",
+    "vjepa2_vitl_dup",
 }
 
 
@@ -157,8 +164,9 @@ def main(cfg: DictConfig) -> None:
     all_preds: List[int] = []
     all_labels: List[int] = []
 
+    pbar = tqdm(val_loader, total=len(val_loader), desc="eval", dynamic_ncols=True)
     with torch.no_grad():
-        for video_batch, labels in val_loader:
+        for video_batch, labels in pbar:
             video_batch = video_batch.to(device)
             labels      = labels.to(device)
 
@@ -192,6 +200,12 @@ def main(cfg: DictConfig) -> None:
                 conf_matrix[l.item(), p.item()] += 1
             all_preds.extend(preds_cpu.tolist())
             all_labels.extend(labels_cpu.tolist())
+
+            pbar.set_postfix({
+                "top1": f"{correct_top1 / max(total, 1):.4f}",
+                "top5": f"{correct_top5 / max(total, 1):.4f}",
+                "n":    total,
+            })
 
     top1_accuracy = correct_top1 / max(total, 1)
     top5_accuracy = correct_top5 / max(total, 1)

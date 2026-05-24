@@ -1,0 +1,48 @@
+# @package _global_
+# V-JEPA 2 × ViT-Large — Frames dupliquées + dégel doux
+#
+# Modèle (~300 M params) pré-entraîné puis fine-tuned sur SSv2 (174 classes).
+# Re-fine-tuning vers nos 33 classes via attentive pooler + petite MLP head.
+#
+# Stratégie (cf. slide "Frames dupliquées + dégel doux") :
+#   1. 16 frames (4 dupliquées) — chaque frame du clip 4-frames répétée 4 fois,
+#      pour que le tubelet encoder (tubelet_size=2) voie 8 tubelets cohérents.
+#   2. Dégel doux : TOUS les blocs entraînables, mais LR backbone ×0.03
+#      (sinon il overfit). Gain rapporté : +3 %.
+#   3. AdamW, weight_decay 0.05, warmup_cosine, augmentation standard.
+defaults:
+  - override /model: vjepa2_vitl_dup
+
+model:
+  backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+  num_frozen_blocks: 0
+  crop_size: 256
+  dropout: 0.1
+  head_hidden: 512
+  pool_heads: 8
+
+training:
+  epochs: 30
+  lr: 1.0e-4
+  backbone_lr_scale: 0.03      # « LR backbone ×0,03, sinon il overfit »
+  llrd_factor: 1.0             # dégel doux uniforme (pas de LLRD par bloc)
+  batch_size: 4
+  grad_accum_steps: 16
+  optimizer: adamw
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  # data augmentation (standard track-B)
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+  use_mixup: true
+  mixup_alpha: 0.4

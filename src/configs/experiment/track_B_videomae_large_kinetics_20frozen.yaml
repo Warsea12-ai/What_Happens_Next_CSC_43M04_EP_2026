@@ -1,0 +1,47 @@
+# @package _global_
+# VideoMAE-Large : version "light fine-tune" de track_B_videomae_large_kinetics_2frozen.
+#
+# Différence clé : on gèle 20 blocs sur 24 (vs 4/24 pour la recette espagne Large).
+# Seuls les 4 derniers blocs transformer + la tête MLP sont entraînés.
+#
+# Pourquoi cette variante :
+# - L'expérience hongrie (2frozen) entraîne 20 blocs = ~250M de params → mémoire tendue,
+#   batch=4 + grad_accum=16, sensible au catastrophic forgetting des features Kinetics.
+# - Ici on n'adapte que les 4 derniers blocs (~50M de params trainable) :
+#     * mémoire libérée → batch_size=8, grad_accum=8 (effective batch 64 identique)
+#     * moins de risque d'écraser les features bas-niveau pré-entraînées
+#     * backbone_lr_scale plus généreux (0.10 vs 0.05) car peu de blocs à perturber
+#     * LLRD 0.80 sur 4 blocs → facteurs [1.00, 0.80, 0.64, 0.51]
+# - Convergence attendue plus rapide → epochs ramené à 60.
+defaults:
+  - override /model: videomae_large
+
+model:
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
+  num_frozen_blocks: 20
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 60
+  lr: 5.0e-5
+  backbone_lr_scale: 0.10
+  llrd_factor: 0.80
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 8
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
