@@ -1,0 +1,44 @@
+# @package _global_
+# best_combo_v2 + interp_mode=centered.
+#
+# Hypothèse : l'upsampling temporel "aligned" (4→16 frames aux positions
+# [0,5,10,15]) privilégie F0 et F3 (présentes telles quelles aux bords),
+# biaisant le gradient temporel du backbone vers les extrémités. Le mode
+# "centered" place chaque frame d'entrée au centre de son segment
+# (positions [1.5,5.5,9.5,13.5]), rendant toutes les positions de sortie
+# des blends linéaires symétriques. A/B sur la meilleure config VideoMAE.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "centered"     # ← seul changement vs best_combo_v2
+
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
