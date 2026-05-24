@@ -193,6 +193,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
     num_classes = cfg.model.num_classes
     pretrained = bool(cfg.model.get("pretrained", False))
 
+    # ── Ensemble wrapper : bundle de plusieurs sub-modèles + W per-class ────
+    # Import retardé pour éviter le cycle si ensemble_soft_vote → evaluate → train.
+    if name == "ensemble_soft_vote":
+        from models.ensemble_soft_vote import EnsembleSoftVote
+        return EnsembleSoftVote(
+            sub_configs=list(cfg.model.sub_configs),
+            num_classes=int(num_classes),
+            weight_matrix=None,  # chargé via load_state_dict (buffer)
+        )
+
     if name == "cnn_baseline":
         return CNNBaseline(
             num_classes=num_classes,
