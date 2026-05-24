@@ -521,6 +521,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=int(cfg.model.get("head_hidden", 1024)),
             lora_rank=int(cfg.model.get("lora_rank", 0)),
             lora_alpha=float(cfg.model.get("lora_alpha", 0.0)),
+            interp_mode=str(cfg.model.get("interp_mode", "aligned")),
         )
     if name == "videomae_multiscale":
         return VideoMAEMultiScale(

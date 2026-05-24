@@ -31,6 +31,8 @@ import torch
 import torch.nn as nn
 from transformers import VideoMAEModel
 
+from temporal_interp import interp_temporal
+
 _IN_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 1, 3, 1, 1)
 _IN_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 1, 3, 1, 1)
 _VM_MEAN = torch.tensor([0.5, 0.5, 0.5]).view(1, 1, 3, 1, 1)
@@ -98,9 +100,18 @@ class VideoMAECrossAttnPairs(nn.Module):
         head_hidden: int = 1024,
         lora_rank: int = 0,
         lora_alpha: float = 0.0,
+        interp_mode: str = "aligned",
     ) -> None:
         super().__init__()
         self.num_frozen_blocks = num_frozen_blocks
+        # "aligned"  : input frames at output positions [0, 5, 10, 15] (historical).
+        # "centered" : input frames centered in their segments → all 16 positions
+        #              are symmetric linear blends (no edge bias).
+        # "repeat"   : duplicate each input frame 4× (no interpolation).
+        # See src/temporal_interp.py.
+        if interp_mode not in ("aligned", "centered", "repeat"):
+            raise ValueError(f"interp_mode must be aligned|centered|repeat, got {interp_mode!r}")
+        self.interp_mode = interp_mode
 
         self.encoder = VideoMAEModel.from_pretrained(backbone, use_safetensors=True)
 
@@ -196,7 +207,12 @@ class VideoMAECrossAttnPairs(nn.Module):
         s_vm = _VM_STD.to(device, dtype)
         x = (x * s_in + m_in - m_vm) / s_vm
 
-        x = _linear_upsample(x, _TARGET_FRAMES)
+        # Upsample 4 → 16 frames according to the configured interp_mode.
+        # NB: _ORIG_GROUPS = (0, 2, 5, 7) was tuned for aligned mode (input
+        # frames at positions [0, 5, 10, 15] → tubelets 0, 2, 5, 7). For
+        # centered/repeat modes the mapping is slightly different but the
+        # 4 chosen tubelets still capture the most "F_k-dominant" region.
+        x = interp_temporal(x, target_T=_TARGET_FRAMES, mode=self.interp_mode)
 
         tokens = self.encoder(pixel_values=x).last_hidden_state.to(dtype)
         D = tokens.shape[-1]
