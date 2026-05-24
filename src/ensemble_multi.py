@@ -137,15 +137,45 @@ def softmax(x: np.ndarray) -> np.ndarray:
     return e / e.sum(axis=1, keepdims=True)
 
 
+def _broadcast_weights(weights: np.ndarray, M: int, C: int) -> np.ndarray:
+    """Normalise et reformule les poids en matrice (C, M).
+
+    weights peut être :
+      - (M,)    : poids scalaire par modèle, identique sur toutes les classes
+      - (C, M)  : poids par-classe-par-modèle (laissé tel quel)
+    Sortie : (C, M), chaque colonne par-classe normalisée à somme 1.
+    """
+    w = np.asarray(weights, dtype=float)
+    if w.ndim == 1:
+        if w.shape != (M,):
+            raise ValueError(f"weights shape {w.shape} ≠ ({M},)")
+        W = np.broadcast_to(w[None, :], (C, M)).copy()
+    elif w.ndim == 2:
+        if w.shape != (C, M):
+            raise ValueError(f"weights shape {w.shape} ≠ ({C}, {M})")
+        W = w.astype(float).copy()
+    else:
+        raise ValueError(f"weights ndim {w.ndim} non supporté")
+    # Normalisation par classe : Σ_m W[c, m] = 1 pour tout c
+    s = W.sum(axis=1, keepdims=True)
+    s[s == 0] = 1.0
+    return W / s
+
+
 def _ensemble_logits(stack: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    w = weights / weights.sum()
-    return (stack * w[:, None, None]).sum(axis=0)
+    """stack : (M, N, C). weights : (M,) ou (C, M). Renvoie (N, C)."""
+    M, N, C = stack.shape
+    W = _broadcast_weights(weights, M, C)
+    # W (C, M) → (M, C). Multiplie classe par classe par modèle.
+    return (stack * W.T[:, None, :]).sum(axis=0)
 
 
 def _ensemble_proba(stack: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    w = weights / weights.sum()
-    probas = np.stack([softmax(stack[i]) for i in range(stack.shape[0])], axis=0)
-    return (probas * w[:, None, None]).sum(axis=0)
+    """Soft-vote : moyenne pondérée des softmax. Supporte poids per-class."""
+    M, N, C = stack.shape
+    W = _broadcast_weights(weights, M, C)
+    probas = np.stack([softmax(stack[i]) for i in range(M)], axis=0)  # (M, N, C)
+    return (probas * W.T[:, None, :]).sum(axis=0)
 
 
 def evaluate_combination(
@@ -155,10 +185,87 @@ def evaluate_combination(
     return topk_accuracy(out, labels, 1), topk_accuracy(out, labels, 5)
 
 
+# ── Stratégies de pondération ────────────────────────────────────────────────
+# Chaque stratégie prend (stack, labels) issus du fold "train" et renvoie soit :
+#   - un vecteur (M,) — poids uniforme cross-classes
+#   - une matrice (C, M) — poids par classe
+# stack : (M, N_train, C), labels : (N_train,)
+
+def _wfn_uniform(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    return np.ones(stack.shape[0])
+
+
+def _wfn_lin_val_acc(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Poids global = top-1 accuracy de chaque modèle sur train fold."""
+    return np.array([
+        topk_accuracy(stack[m], labels, 1) for m in range(stack.shape[0])
+    ])
+
+
+def _per_class_recall(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Renvoie matrice recall[c, m] = P(model m correct | true class c).
+
+    Pour chaque (m, c) : parmi les samples de classe c, fraction où
+    argmax(logits_m) == c.
+    Recall = 0 si aucun sample de c dans le fold → on remplace par moyenne
+    cross-class du modèle pour éviter les divisions nulles plus tard.
+    """
+    M, N, C = stack.shape
+    out = np.zeros((C, M))
+    for m in range(M):
+        preds = stack[m].argmax(axis=1)
+        for c in range(C):
+            mask = labels == c
+            if mask.sum() == 0:
+                out[c, m] = preds.size and (preds == labels).mean() or 0.0
+            else:
+                out[c, m] = (preds[mask] == c).mean()
+    return out
+
+
+def _wfn_per_class_recall(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Poids (C, M) proportionnel au recall par classe."""
+    R = _per_class_recall(stack, labels)
+    # Smoothing : ajoute petit constant pour éviter qu'une classe avec
+    # recall=0 partout n'ait que des poids nuls (la normalisation les rendrait
+    # tous 1/M de fait, ce qu'on veut).
+    return R + 1e-6
+
+
+def _wfn_per_class_recall_sq(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """Poids (C, M) ∝ recall² → amplifie l'expert dominant par classe."""
+    R = _per_class_recall(stack, labels)
+    return R ** 2 + 1e-6
+
+
+def _wfn_per_class_argmax(stack: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """One-hot par classe : seul le modèle au plus haut recall vote sur cette classe."""
+    R = _per_class_recall(stack, labels)
+    M = stack.shape[0]
+    W = np.zeros_like(R)
+    best = R.argmax(axis=1)            # (C,)
+    W[np.arange(R.shape[0]), best] = 1.0
+    return W
+
+
+def _wfn_per_class_softmax(stack: np.ndarray, labels: np.ndarray, temp: float = 0.1) -> np.ndarray:
+    """Poids (C, M) = softmax(recall / temp). temp faible → quasi-argmax."""
+    R = _per_class_recall(stack, labels)
+    return softmax(R / temp)
+
+
+WEIGHT_SCHEMES = {
+    "uniform":              _wfn_uniform,
+    "lin(val_acc)":         _wfn_lin_val_acc,
+    "per_class_recall":     _wfn_per_class_recall,
+    "per_class_recall_sq":  _wfn_per_class_recall_sq,
+    "per_class_argmax":     _wfn_per_class_argmax,
+    "per_class_softmax_t01": lambda s, l: _wfn_per_class_softmax(s, l, temp=0.1),
+}
+
+
 def _kfold_indices(n: int, k: int, seed: int) -> List[np.ndarray]:
-    """K-fold splits stratifiés ne sont pas garantis ici (labels-free split) ;
-    on fait des splits aléatoires reproductibles. C'est suffisant pour
-    mesurer la stabilité d'un ensemble combiné."""
+    """K-fold splits aléatoires reproductibles."""
     rng = np.random.default_rng(seed)
     perm = rng.permutation(n)
     folds = np.array_split(perm, k)
@@ -166,15 +273,22 @@ def _kfold_indices(n: int, k: int, seed: int) -> List[np.ndarray]:
 
 
 def _cv_score(
-    stack: np.ndarray, labels: np.ndarray, weights: np.ndarray, mode: str,
+    stack: np.ndarray, labels: np.ndarray, weight_fn, mode: str,
     folds: List[np.ndarray],
 ) -> Tuple[float, float, float, float]:
-    """Renvoie (mean_top1, std_top1, mean_top5, std_top5) sur k folds."""
+    """Calcule k-fold CV en respectant la séparation train/eval :
+       les poids sont appris sur les folds *autres que* le fold courant,
+       puis appliqués au fold courant (pas de leak val→eval).
+    """
     top1s, top5s = [], []
-    for fold in folds:
-        sub_stack  = stack[:, fold]      # M × |fold| × C
-        sub_labels = labels[fold]
-        t1, t5 = evaluate_combination(sub_stack, sub_labels, weights, mode)
+    for fold_i, eval_fold in enumerate(folds):
+        train_idxs = np.concatenate([f for j, f in enumerate(folds) if j != fold_i])
+        train_stack  = stack[:, train_idxs]
+        train_labels = labels[train_idxs]
+        eval_stack   = stack[:, eval_fold]
+        eval_labels  = labels[eval_fold]
+        W = weight_fn(train_stack, train_labels)
+        t1, t5 = evaluate_combination(eval_stack, eval_labels, W, mode)
         top1s.append(t1); top5s.append(t5)
     return float(np.mean(top1s)), float(np.std(top1s)), float(np.mean(top5s)), float(np.std(top5s))
 
@@ -324,35 +438,30 @@ def main() -> None:
     print("\n=== Résultats individuels (k-fold CV) ===")
     indiv_scores = {}
     for i, m in enumerate(per_model):
-        # CV simulée avec un seul modèle (poids unique)
+        # CV pour 1 modèle = top-1 stable du modèle seul sur chaque fold eval
         single = stack[i:i+1]
         cv_t1, cv_std, cv_t5, cv_t5_std = _cv_score(
-            single, labels, np.array([1.0]), "logit_avg", folds,
+            single, labels, _wfn_uniform, "logit_avg", folds,
         )
         indiv_scores[m["name"]] = cv_t1
         print(f"  {m['name'][:55]:<55} family={m['family'][:40]:<40} "
               f"top1={cv_t1:.4f}±{cv_std:.4f}  top5={cv_t5:.4f}±{cv_t5_std:.4f}")
 
-    weight_schemes = {
-        "uniform":      lambda a: np.ones_like(a),
-        "lin(val_acc)": lambda a: a.astype(float),
-    }
     modes = ["logit_avg", "soft_vote"]
 
     print(f"\n=== Toutes les combinaisons {{2..{M}}} × "
-          f"{len(weight_schemes)} pondérations × {len(modes)} modes ===")
+          f"{len(WEIGHT_SCHEMES)} pondérations × {len(modes)} modes ===")
+    print(f"    Schémas : {list(WEIGHT_SCHEMES.keys())}")
     results: List[Dict[str, Any]] = []
     for size in range(2, M + 1):
         for idxs in itertools.combinations(range(M), size):
             sub_stack = stack[list(idxs)]
-            sub_accs  = accs[list(idxs)]
             sub_fams  = [families[i] for i in idxs]
             n_unique  = len(set(sub_fams))
-            for w_name, w_fn in weight_schemes.items():
+            for w_name, w_fn in WEIGHT_SCHEMES.items():
                 for mode in modes:
-                    w = w_fn(sub_accs)
                     cv_t1, cv_std, cv_t5, cv_t5_std = _cv_score(
-                        sub_stack, labels, w, mode, folds,
+                        sub_stack, labels, w_fn, mode, folds,
                     )
                     robust = cv_t1 - args.robust_lambda * cv_std
                     results.append({
@@ -419,12 +528,18 @@ def main() -> None:
         return
 
     test_stack = np.stack(test_logits_stack, axis=0)  # M×N×C
-    test_accs_arr = np.array(test_accs)
-    w = weight_schemes[winner["weight_scheme"]](test_accs_arr)
+    # Pour la submission, on apprend les poids sur TOUT le val (on n'a plus
+    # besoin de holdout puisqu'on est au-delà de la phase de sélection).
+    winner_idxs = [name_to_idx[n] for n in winner_names]
+    val_stack_winner = stack[winner_idxs]                 # M×N_val×C
+    w_fn = WEIGHT_SCHEMES[winner["weight_scheme"]]
+    W = w_fn(val_stack_winner, labels)
+    print(f"  weights shape : {np.asarray(W).shape}  "
+          f"(scalaire si (M,), per-class si (C, M))")
     if winner["mode"] == "soft_vote":
-        combined = _ensemble_proba(test_stack, w)
+        combined = _ensemble_proba(test_stack, W)
     else:
-        combined = _ensemble_logits(test_stack, w)
+        combined = _ensemble_logits(test_stack, W)
     preds = combined.argmax(axis=1)
 
     if not names_cache.exists():
