@@ -1,0 +1,39 @@
+# @package _global_
+# vjepa2_l_combo with 60 epochs (vs default 30) — V-JEPA-L is small enough to
+# fit longer training comfortably on 130W; test if the curve still climbs.
+defaults:
+  - override /model: vjepa2_vitl_dup
+
+model:
+  backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+  num_frozen_blocks: 0
+  crop_size: 256
+  dropout: 0.1
+  head_hidden: 2048
+  pool_heads: 8
+
+training:
+  epochs: 60                  # was 30 — let it cook
+  lr: 3.0e-4
+  backbone_lr_scale: 0.2
+  llrd_factor: 1.0
+  batch_size: 4
+  grad_accum_steps: 16
+  optimizer: adamw
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 5            # mild bump for longer schedule
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
