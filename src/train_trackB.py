@@ -198,6 +198,7 @@ from models.qwen25vl_3b_video import Qwen25VL3BVideo
 from models.internvl25_4b_video import InternVL25_4BVideo
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
+from gpu_wait import wait_for_gpu_memory, run_with_oom_retry, free_mb as gpu_free_mb
 
 try:
     from tqdm.auto import tqdm
@@ -793,6 +794,7 @@ def train_one_epoch(
         enumerate(data_loader), total=n_batches, desc="train", unit="batch",
         dynamic_ncols=True, mininterval=2.0,
     )
+    skipped_oom = 0
     for step, (video_batch, labels) in pbar:
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
@@ -808,11 +810,32 @@ def train_one_epoch(
         if use_augment:
             video_batch = video_augment(video_batch, **aug_kwargs)
 
-        with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
-            logits = model(video_batch)
-            loss = loss_fn(logits, labels) / grad_accum_steps
-
-        loss.backward()
+        # OOM-resilient forward+backward. On co-tenant memory spikes we'd rather
+        # skip a batch and keep training than crash and lose the multi-GB ckpt.
+        try:
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
+                logits = model(video_batch)
+                loss = loss_fn(logits, labels) / grad_accum_steps
+            loss.backward()
+        except torch.cuda.OutOfMemoryError as _oom:
+            skipped_oom += 1
+            optimizer.zero_grad(set_to_none=True)
+            del video_batch, labels
+            if "logits" in locals():
+                del logits
+            if "loss" in locals():
+                del loss
+            torch.cuda.empty_cache()
+            cur = gpu_free_mb()
+            tqdm.write(f"  [oom-skip] step {step + 1}/{n_batches}: free={cur} MB, "
+                       f"skipping batch (#{skipped_oom} OOM in this epoch). "
+                       f"Waiting for ≥1024 MB before next batch...")
+            try:
+                wait_for_gpu_memory(min_free_mb=1024, poll_interval=20,
+                                    max_wait=600, label="train-step")
+            except TimeoutError:
+                pass
+            continue
 
         is_last_batch = (step + 1 == n_batches)
         if (step + 1) % grad_accum_steps == 0 or is_last_batch:
@@ -822,7 +845,20 @@ def train_one_epoch(
             ).item())
             grad_norm_sum += batch_grad_norm
             grad_norm_n += 1
-            optimizer.step()
+            try:
+                optimizer.step()
+            except torch.cuda.OutOfMemoryError:
+                # Adam step needs ~optim_state-size of fresh memory; if it OOMs the
+                # gradients on this micro-batch are discarded but we keep training.
+                skipped_oom += 1
+                torch.cuda.empty_cache()
+                tqdm.write(f"  [oom-skip] step {step + 1}: optimizer.step() OOM, "
+                           f"discarded grads, waiting for memory…")
+                try:
+                    wait_for_gpu_memory(min_free_mb=1024, poll_interval=20,
+                                        max_wait=600, label="opt-step")
+                except TimeoutError:
+                    pass
             optimizer.zero_grad()
 
         running_loss += float(loss.item()) * grad_accum_steps * labels.size(0)
@@ -832,6 +868,9 @@ def train_one_epoch(
         if total > 0 and (step + 1) % max(1, n_batches // 20) == 0:
             pbar.set_postfix(loss=f"{running_loss / total:.3f}",
                              acc=f"{correct / total:.3f}", refresh=False)
+
+    if skipped_oom > 0:
+        print(f"  [oom-skip] epoch summary: {skipped_oom} batch(es) skipped due to GPU contention")
 
     avg_loss = running_loss / max(total, 1)
     acc = correct / max(total, 1)
@@ -847,16 +886,35 @@ def evaluate_epoch(
 ) -> Tuple[float, float]:
     model.eval()
     running_loss, correct, total = 0.0, 0, 0
+    skipped_oom = 0
     pbar = tqdm(data_loader, total=len(data_loader), desc="val",
                 unit="batch", dynamic_ncols=True, mininterval=2.0)
     for video_batch, labels in pbar:
         video_batch = video_batch.to(device, non_blocking=True)
         labels      = labels.to(device, non_blocking=True)
-        logits = model(video_batch)
-        loss = loss_fn(logits, labels)
+        try:
+            logits = model(video_batch)
+            loss = loss_fn(logits, labels)
+        except torch.cuda.OutOfMemoryError:
+            skipped_oom += 1
+            del video_batch, labels
+            if "logits" in locals():
+                del logits
+            torch.cuda.empty_cache()
+            tqdm.write(f"  [oom-skip val] free={gpu_free_mb()} MB, skipping batch "
+                       f"(#{skipped_oom}). Waiting for ≥1024 MB…")
+            try:
+                wait_for_gpu_memory(min_free_mb=1024, poll_interval=20,
+                                    max_wait=600, label="val-step")
+            except TimeoutError:
+                pass
+            continue
         running_loss += float(loss.item()) * labels.size(0)
         correct += int((logits.argmax(dim=1) == labels).sum().item())
         total += labels.size(0)
+    if skipped_oom > 0:
+        print(f"  [oom-skip val] {skipped_oom} batch(es) skipped (val acc on "
+              f"{total}/{len(data_loader.dataset)} samples)")
     return running_loss / max(total, 1), correct / max(total, 1)
 
 
@@ -919,7 +977,16 @@ def main(cfg: DictConfig) -> None:
         persistent_workers=True,
     )
 
-    model = build_model(cfg).to(device)
+    # Heavy backbones (DINOv3-7B, InternVideo2-6B, LLaVA-7B…) sometimes OOM at
+    # model.to(device) when a co-tenant briefly spikes its GPU usage. Wait until
+    # we have a reasonable margin (2 GB) before allocating, then retry on OOM —
+    # crashing here would lose the multi-GB checkpoint progress.
+    if device.type == "cuda":
+        wait_for_gpu_memory(min_free_mb=2048, poll_interval=30, label="model-init")
+    model = run_with_oom_retry(
+        lambda: build_model(cfg).to(device),
+        min_free_mb=2048, poll_interval=30, label="model-init",
+    )
     # wandb.watch(log="all") snapshote TOUS les params (frozen inclus) → satura le
     # buffer sur backbones 1B+ et faisait disparaître les wandb.log() d'epoch.
     # log="gradients" ne hook que les params trainables (frozen → pas de grad →

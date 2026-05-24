@@ -23,6 +23,7 @@ from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 import train as _train_a
 import train_trackB as _train_b
 from utils import build_transforms, set_seed
+from gpu_wait import wait_for_gpu_memory, run_with_oom_retry, free_mb as gpu_free_mb
 
 try:
     from tqdm.auto import tqdm
@@ -96,7 +97,16 @@ def load_model_from_checkpoint(checkpoint: Dict[str, Any], device: torch.device)
     cfg = OmegaConf.create(raw_cfg)
     model = build_model(cfg)
     model.load_state_dict(checkpoint["model_state_dict"])
-    model.to(device)
+    # Heavy backbones (DINOv3-7B = 14 GB bf16, LLaVA-7B, InternVideo2-6B…) regularly
+    # OOM on `model.to(device)` when a co-tenant occupies part of the 24 GB GPU.
+    # Wait until ≥2 GB is free, then retry the .to() on OOM. This is the exact spot
+    # where the dinov3_7b run on mulet died (free=54 MiB when we tried to allocate 64 MiB).
+    if device.type == "cuda":
+        wait_for_gpu_memory(min_free_mb=2048, poll_interval=30, label="eval-model.to")
+    run_with_oom_retry(
+        lambda: model.to(device),
+        min_free_mb=2048, poll_interval=30, label="eval-model.to",
+    )
     model.eval()
     return model
 
@@ -165,21 +175,37 @@ def main(cfg: DictConfig) -> None:
     all_labels: List[int] = []
 
     pbar = tqdm(val_loader, total=len(val_loader), desc="eval", dynamic_ncols=True)
+    skipped_oom = 0
     with torch.no_grad():
         for video_batch, labels in pbar:
             video_batch = video_batch.to(device)
             labels      = labels.to(device)
 
-            if use_multi_crop:
-                crops = _three_crop(video_batch, crop_size=224)
-                logits = sum(model(c) for c in crops) / len(crops)
-            elif use_tta:
-                # Average logits over: original + horizontal flip
-                logits_orig = model(video_batch)
-                logits_flip = model(torch.flip(video_batch, dims=[-1]))
-                logits = (logits_orig + logits_flip) * 0.5
-            else:
-                logits = model(video_batch)  # (B, num_classes)
+            try:
+                if use_multi_crop:
+                    crops = _three_crop(video_batch, crop_size=224)
+                    logits = sum(model(c) for c in crops) / len(crops)
+                elif use_tta:
+                    # Average logits over: original + horizontal flip
+                    logits_orig = model(video_batch)
+                    logits_flip = model(torch.flip(video_batch, dims=[-1]))
+                    logits = (logits_orig + logits_flip) * 0.5
+                else:
+                    logits = model(video_batch)  # (B, num_classes)
+            except torch.cuda.OutOfMemoryError:
+                skipped_oom += 1
+                del video_batch, labels
+                if "logits" in locals():
+                    del logits
+                torch.cuda.empty_cache()
+                tqdm.write(f"  [oom-skip eval] free={gpu_free_mb()} MB, skipping batch "
+                           f"(#{skipped_oom}). Waiting for ≥1024 MB…")
+                try:
+                    wait_for_gpu_memory(min_free_mb=1024, poll_interval=20,
+                                        max_wait=600, label="eval-batch")
+                except TimeoutError:
+                    pass
+                continue
 
             # Top-1: argmax class matches label
             predictions_top1 = logits.argmax(dim=1)
@@ -210,7 +236,8 @@ def main(cfg: DictConfig) -> None:
     top1_accuracy = correct_top1 / max(total, 1)
     top5_accuracy = correct_top5 / max(total, 1)
 
-    print(f"Validation samples: {len(val_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}  (scored: {total}, "
+          f"oom-skipped batches: {skipped_oom})")
     print(f"Top-1 accuracy: {top1_accuracy:.4f}")
     print(f"Top-5 accuracy: {top5_accuracy:.4f}")
 
