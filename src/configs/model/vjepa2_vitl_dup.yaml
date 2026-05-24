@@ -1,7 +1,7 @@
 name: vjepa2_vitl_dup
 num_classes: 33
 backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
-cache_dir: "/Data/vianney.gauthier/hub"
+cache_dir: null   # null → HF_HOME (par défaut /Data/.hf_cache via launch.py)
 num_frozen_blocks: 0
 crop_size: 256
 dropout: 0.1

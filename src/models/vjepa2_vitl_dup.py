@@ -73,7 +73,7 @@ class VJEPA2ViTLDup(nn.Module):
         self,
         num_classes:       int   = 33,
         backbone:          str   = "facebook/vjepa2-vitl-fpc16-256-ssv2",
-        cache_dir:         str   = "/Data/vianney.gauthier/hub",
+        cache_dir:         str | None = None,
         num_frozen_blocks: int   = 0,
         crop_size:         int   = 256,
         dropout:           float = 0.1,
@@ -85,9 +85,12 @@ class VJEPA2ViTLDup(nn.Module):
         self.num_frozen_blocks = num_frozen_blocks
         self.gradient_checkpointing = gradient_checkpointing
 
+        # cache_dir None / vide → from_pretrained utilise HF_HOME (recommandé).
+        # Évite les PermissionError quand un YAML hard-code le hub d'un autre user.
+        _cache = cache_dir if (cache_dir and cache_dir.strip()) else None
         full = VJEPA2Model.from_pretrained(
             backbone,
-            cache_dir=cache_dir,
+            cache_dir=_cache,
             frames_per_clip=_TARGET_FRAMES,
             crop_size=crop_size,
             use_safetensors=True,
