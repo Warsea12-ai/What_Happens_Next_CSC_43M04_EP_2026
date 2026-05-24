@@ -1,0 +1,41 @@
+# @package _global_
+# Fill temporal resolution gap: num_frames was always 4 in all sweep runs.
+# Doubling to 8 doubles the VideoMAE temporal patches → richer motion signal
+# at the cost of ~2× activation memory. Halve batch + double accum to fit
+# on RTX 4000 Ada 20GB (130W).
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 2
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 1024
+
+dataset:
+  num_frames: 8            # was 4
+
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.8
+  batch_size: 4            # was 8 — halve to keep activations in budget
+  grad_accum_steps: 16     # was 8 — double to maintain effective batch=64
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
