@@ -1,0 +1,45 @@
+# @package _global_
+# LLaVA-NeXT-Video-7B v2 — pari capacité LoRA + LR plus rapide.
+# Base v1 : 0.41 val_acc en 4 epochs sur RTX 3090 (~7.5h/epoch).
+# Changements vs v1 :
+#   - lora_rank 16 -> 32 (2x capacité d'adaptation)
+#   - target_modules ajoute k_proj + o_proj (couverture attn complète)
+#   - backbone_lr_scale 0.1 -> 0.3 (LoRA LR 1e-5 -> 3e-5, adaptation + rapide)
+#   - epochs 40 -> 20 (réaliste vu 7.5h/epoch)
+defaults:
+  - override /model: llava_mistral_video
+
+model:
+  backbone: "llava-hf/LLaVA-NeXT-Video-7B-hf"
+  lora_rank: 32
+  lora_alpha: 64.0
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  head_hidden: 2048
+  dropout: 0.3
+  use_gradient_checkpointing: true
+
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.3
+  llrd_factor: 0.0
+  batch_size: 2
+  grad_accum_steps: 16
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.25
+  blur_prob: 0.05
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  wandb_watch: false
+  num_workers: 2
