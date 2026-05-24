@@ -1,0 +1,6 @@
+name: timesformer_head
+num_classes: 33
+backbone: "facebook/timesformer-base-finetuned-ssv2"
+num_frozen_blocks: 0
+dropout: 0.25
+head_hidden: 1024
