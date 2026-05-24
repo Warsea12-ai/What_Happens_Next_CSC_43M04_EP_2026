@@ -680,7 +680,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
             target_frames=int(cfg.model.get("target_frames", 8)),
         )
-    if name == "vjepa2_vitl_dup":
+    if name in ("vjepa2_vitl_dup", "vjepa2_vitg_dup"):
         return VJEPA2ViTLDup(
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitl-fpc16-256-ssv2")),
@@ -690,6 +690,21 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.1)),
             head_hidden=int(cfg.model.get("head_hidden", 512)),
             pool_heads=int(cfg.model.get("pool_heads", 8)),
+            gradient_checkpointing=bool(cfg.model.get("gradient_checkpointing", False)),
+        )
+    if name == "vjepa2_vitl_raft":
+        from models.vjepa2_vitl_raft import VJEPA2RaftDup
+        return VJEPA2RaftDup(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/vjepa2-vitl-fpc16-256-ssv2")),
+            cache_dir=str(cfg.model.get("cache_dir", "/Data/vianney.gauthier/hub")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 0)),
+            crop_size=int(cfg.model.get("crop_size", 256)),
+            dropout=float(cfg.model.get("dropout", 0.1)),
+            head_hidden=int(cfg.model.get("head_hidden", 512)),
+            pool_heads=int(cfg.model.get("pool_heads", 8)),
+            gradient_checkpointing=bool(cfg.model.get("gradient_checkpointing", False)),
+            raft_iters=int(cfg.model.get("raft_iters", 12)),
         )
     if name == "internvl25_4b_video":
         return InternVL25_4BVideo(
@@ -951,8 +966,11 @@ def main(cfg: DictConfig) -> None:
     )
 
     use_rrc = bool(cfg.training.get("use_random_resized_crop", True))
+    rrc_scale_min = float(cfg.training.get("rrc_scale_min", 0.6))
+    rrc_scale_max = float(cfg.training.get("rrc_scale_max", 1.0))
     train_transform = build_transforms(
         is_training=True, use_imagenet_norm=True, use_random_resized_crop=use_rrc,
+        rrc_scale_min=rrc_scale_min, rrc_scale_max=rrc_scale_max,
     )
     eval_transform = build_transforms(is_training=False, use_imagenet_norm=True)
 

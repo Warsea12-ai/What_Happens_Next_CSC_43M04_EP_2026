@@ -27,6 +27,8 @@ def build_transforms(
     is_training: bool = True,
     use_imagenet_norm: bool = True,
     use_random_resized_crop: bool = False,
+    rrc_scale_min: float = 0.6,
+    rrc_scale_max: float = 1.0,
 ) -> transforms.Compose:
     """
     Standard torchvision pipeline for single RGB frames.
@@ -35,7 +37,10 @@ def build_transforms(
         True  -> mean/std from ImageNet (usual when pretrained=True)
         False -> still scale to [0,1]; you can swap norms if you prefer
     use_random_resized_crop:
-        True  -> RandomResizedCrop(scale=(0.6, 1.0)) instead of plain Resize
+        True  -> RandomResizedCrop(scale=(rrc_scale_min, rrc_scale_max))
+        Default scale (0.6, 1.0) is the historical setting. For SthSth-like
+        tasks where the action localisation matters, milder crops
+        (scale_min=0.9+) keep nearly the full frame.
     """
     if use_imagenet_norm:
         normalize = transforms.Normalize(
@@ -47,7 +52,7 @@ def build_transforms(
 
     if is_training:
         spatial = (
-            transforms.RandomResizedCrop(image_size, scale=(0.6, 1.0))
+            transforms.RandomResizedCrop(image_size, scale=(rrc_scale_min, rrc_scale_max))
             if use_random_resized_crop
             else transforms.Resize((image_size, image_size))
         )

@@ -1,0 +1,41 @@
+# @package _global_
+# Single-axis sweep: RandomResizedCrop with scale=(0.95, 1.0).
+# Even milder than rrc_09 — barely-there crop (>=95% of image area kept).
+# Together with rrc_09 and aug_no_rrc this maps the impact of RRC strength.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 2
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 1024
+
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: true
+  rrc_scale_min: 0.95        # was 0.6
+  rrc_scale_max: 1.0
+
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
