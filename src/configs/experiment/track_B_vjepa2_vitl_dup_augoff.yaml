@@ -1,0 +1,47 @@
+# @package _global_
+# V-JEPA 2 ViT-L + Frames dupliquées + dégel doux + AUGMENTATIONS COMPLÈTEMENT OFF
+#
+# Variante de track_B_vjepa2_vitl_dup adaptée à la découverte des sweeps Series 5 :
+#   « aug_off (all off, +5.71pp winner) »
+#
+# Hypothèse triangulée : les augmentations *apparence* (color jitter, blur,
+# RandomResizedCrop) shiftent les statistiques pixel par rapport à ce que
+# l'encoder V-JEPA 2 a vu en pré-entraînement SSv2, ce qui pénalise
+# fortement les features. Les augmentations *motion* (flip, temporal reverse,
+# mixup) coûtent aussi quelques points.
+#
+# → Tout est désactivé. Seul le pipeline de base (Resize + ImageNet norm) reste.
+#
+# Cible matérielle : RTX A4000 140W 16 GB (country host). Tient avec batch=4
+# + grad_accum=16 + bf16 + ~12 GB d'activations sur ViT-L (300M).
+defaults:
+  - override /model: vjepa2_vitl_dup
+
+model:
+  backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+  num_frozen_blocks: 0
+  crop_size: 256
+  dropout: 0.1
+  head_hidden: 512
+  pool_heads: 8
+
+training:
+  epochs: 30
+  lr: 1.0e-4
+  backbone_lr_scale: 0.03      # « LR backbone ×0,03, sinon il overfit »
+  llrd_factor: 1.0
+  batch_size: 4
+  grad_accum_steps: 16         # effective batch 64
+  optimizer: adamw
+  weight_decay: 0.05
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  # === Toutes les augmentations OFF (aug_off, +5.71pp dans les sweeps) ===
+  use_random_resized_crop: false  # Resize plain au lieu de RRC
+  use_augment: false              # plus de color/blur/etc
+  flip_prob: 0.0                  # pas de flip horizontal
+  use_temporal_map: false         # pas de temporal reverse equivariance
+  use_mixup: false                # pas de mixup
