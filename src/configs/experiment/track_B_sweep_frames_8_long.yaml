@@ -1,0 +1,41 @@
+# @package _global_
+# Test "under-trained" hypothesis on frames_8.
+# frames_8 reached val=0.604 at best_epoch=12 vs default frames_4 at ~0.65 —
+# might just need more epochs since each epoch sees 2x more temporal data.
+# Doubled epochs: 20 -> 40.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 2
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 1024
+
+dataset:
+  num_frames: 8
+
+training:
+  epochs: 40                  # was 20 — test under-training hypothesis
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.8
+  batch_size: 4               # halve batch to keep activations budget
+  grad_accum_steps: 16        # keep effective batch=64
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5            # mild bump for longer schedule
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

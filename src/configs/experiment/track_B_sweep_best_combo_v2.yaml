@@ -1,0 +1,44 @@
+# @package _global_
+# best_combo_v2 = best_combo (top single-axis winners) PLUS the 3 surprises
+# from series 1-4:
+#   bblrs05      (+1.7pp over bblrs02 — the sweet spot was 0.5, not 0.2)
+#   opt_prodigy  (+11pp over opt_adam — Prodigy auto-LR is dominant)
+#
+# Stacks: aug_off + frozen0 + head2048 + Prodigy(lr=1.0) + bblrs05.
+# Note: lr=1.0 is the Prodigy convention (it auto-scales).
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  # aug_off won
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
