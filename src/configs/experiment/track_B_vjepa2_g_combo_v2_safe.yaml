@@ -1,0 +1,36 @@
+# @package _global_
+# Identique à vjepa2_g_combo_v2 mais batch_size=2 + grad_accum=32 (eff_batch
+# inchangé à 64) pour éviter l'OOM à epoch 3 observé sur le premier run.
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 24
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 25
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.80
+  batch_size: 2
+  grad_accum_steps: 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

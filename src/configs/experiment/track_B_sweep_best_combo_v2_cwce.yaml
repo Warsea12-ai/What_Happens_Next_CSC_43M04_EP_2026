@@ -1,0 +1,53 @@
+# @package _global_
+# best_combo_v2 + class-weighted CrossEntropy ciblée sur les classes les plus
+# sous-rappelées (d'après les confusion matrices des runs série 8).
+#
+# Top confused pairs récurrents :
+#   9 → 14 : 52   (classe 9 fuite vers 14)
+#   11 → 14 : 42  (classe 11 aussi fuite vers 14)
+#   25 → 29 : 46
+#   16 → 22 : 45
+#   2 → 22 : 40
+#   18 → 19 : 46
+#   3 → 31 : 33
+#
+# Stratégie : booster le poids des vraies labels {2,3,9,11,16,18,25} dans la
+# CE pour qu'une erreur sur ces classes coûte plus cher. Les autres restent à
+# 1.0. Voir train_trackB.py:_loss_weight pour la table exacte.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  class_weights: "auto_confusion"   # ← nouveau levier
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

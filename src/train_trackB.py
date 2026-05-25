@@ -824,6 +824,7 @@ def train_one_epoch(
     use_temporal_map: bool = False,
     clip_grad_norm: float = 1.0,
     grad_accum_steps: int = 1,
+    ema_model: "torch.optim.swa_utils.AveragedModel | None" = None,
 ) -> Tuple[float, float, float]:
     model.train()
     running_loss, correct, total = 0.0, 0, 0
@@ -890,6 +891,8 @@ def train_one_epoch(
             grad_norm_n += 1
             try:
                 optimizer.step()
+                if ema_model is not None:
+                    ema_model.update_parameters(model)
             except torch.cuda.OutOfMemoryError:
                 # Adam step needs ~optim_state-size of fresh memory; if it OOMs the
                 # gradients on this micro-batch are discarded but we keep training.
@@ -1050,10 +1053,46 @@ def main(cfg: DictConfig) -> None:
         print(f"[wandb] watch: {_n_train/1e6:.0f}M trainable / {_n_total/1e6:.0f}M total, "
               f"log='{_mode}', log_freq={_freq}")
 
+    # Optional per-class weighting. Two forms accepted:
+    #   - list of `num_classes` floats (explicit weights)
+    #   - the string "auto_confusion" → boosts classes most often *under*-recalled
+    #     by best_combo_v2 (from observed confusion matrix: 9→14, 11→14, 25→29,
+    #     16→22, 2→22, 18→19 — see eval logs of series 8)
+    _class_weights_cfg = cfg.training.get("class_weights", None)
+    _loss_weight: torch.Tensor | None = None
+    if _class_weights_cfg is not None:
+        if isinstance(_class_weights_cfg, str) and _class_weights_cfg == "auto_confusion":
+            _num_classes = int(cfg.model.num_classes)
+            _cw = torch.ones(_num_classes, dtype=torch.float32, device=device)
+            # Boost recall on classes whose true samples leak heavily to others.
+            for _c, _boost in [(9, 1.4), (11, 1.4), (25, 1.4),
+                               (16, 1.25), (2, 1.25), (18, 1.2), (3, 1.2)]:
+                if _c < _num_classes:
+                    _cw[_c] = _boost
+            _loss_weight = _cw
+            print(f"  Class weights: auto_confusion → boosted {(_cw > 1.0).sum().item()} classes")
+        else:
+            _loss_weight = torch.tensor(list(_class_weights_cfg),
+                                        dtype=torch.float32, device=device)
+            print(f"  Class weights: explicit (max={_loss_weight.max():.2f}, "
+                  f"min={_loss_weight.min():.2f})")
+
     loss_fn = nn.CrossEntropyLoss(
-        label_smoothing=float(cfg.training.get("label_smoothing", 0.1))
+        label_smoothing=float(cfg.training.get("label_smoothing", 0.1)),
+        weight=_loss_weight,
     )
     optimizer = build_optimizer(model, cfg)
+
+    # Optional EMA of model weights (evaluated at val time instead of model).
+    # Standard improvement of +0.3 to +1.0pp for stable training schedules.
+    ema_model: "torch.optim.swa_utils.AveragedModel | None" = None
+    if bool(cfg.training.get("use_ema", False)):
+        from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
+        _ema_decay = float(cfg.training.get("ema_decay", 0.999))
+        ema_model = AveragedModel(
+            model, multi_avg_fn=get_ema_multi_avg_fn(_ema_decay), use_buffers=True,
+        )
+        print(f"  EMA enabled: decay={_ema_decay}")
 
     # Print LR groups
     for i, pg in enumerate(optimizer.param_groups):
@@ -1150,10 +1189,15 @@ def main(cfg: DictConfig) -> None:
             use_temporal_map=use_temporal_map,
             clip_grad_norm=clip_grad_norm,
             grad_accum_steps=grad_accum_steps,
+            ema_model=ema_model,
         )
         train_time = time.perf_counter() - epoch_t0
         val_t0 = time.perf_counter()
-        val_loss, val_acc = evaluate_epoch(model, val_loader, loss_fn, device)
+        # If EMA is enabled, evaluate on the averaged model (slightly slower since
+        # the EMA wrapper adds a thin Python forward overhead, but usually more
+        # accurate). Fall back to the live model if EMA is off.
+        _eval_model = ema_model if ema_model is not None else model
+        val_loss, val_acc = evaluate_epoch(_eval_model, val_loader, loss_fn, device)
         val_time = time.perf_counter() - val_t0
         scheduler.step()
 
@@ -1181,8 +1225,14 @@ def main(cfg: DictConfig) -> None:
             best_val_accuracy = val_acc
             recent_save_accs.append(val_acc)
             epochs_since_save = 0
-            torch.save({
-                "model_state_dict":     model.state_dict(),
+            # When EMA is on, the eval'd val_acc came from the EMA model — save
+            # those as `model_state_dict` so downstream consumers (evaluate.py,
+            # ensemble_strategies.py) use the same weights that produced the score.
+            # Live weights remain accessible under `live_state_dict` if needed.
+            _ckpt_state = (ema_model.module.state_dict()
+                           if ema_model is not None else model.state_dict())
+            _save_blob = {
+                "model_state_dict":     _ckpt_state,
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
                 "epoch":                epoch + 1,
@@ -1196,7 +1246,10 @@ def main(cfg: DictConfig) -> None:
                 "num_frames":           int(cfg.dataset.num_frames),
                 "val_accuracy":         val_acc,
                 "config":               OmegaConf.to_container(cfg, resolve=True),
-            }, checkpoint_path)
+            }
+            if ema_model is not None:
+                _save_blob["live_state_dict"] = model.state_dict()
+            torch.save(_save_blob, checkpoint_path)
             print(f"  Saved best model to {checkpoint_path} (epoch={epoch + 1}, val acc={val_acc:.4f})")
             wandb.run.summary["best_val_acc"] = val_acc
             wandb.run.summary["best_epoch"] = epoch + 1
