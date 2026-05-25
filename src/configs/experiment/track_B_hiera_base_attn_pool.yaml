@@ -1,0 +1,32 @@
+# @package _global_
+# Hiera-Base 16x224 K400 — ATTN_POOL.
+defaults:
+  - override /model: hiera_base
+
+model:
+  variant: "attn_pool"
+  model_size: "base"
+  head_hidden: 1024
+  dropout: 0.25
+
+training:
+  epochs: 25
+  lr: 1.0e-4
+  backbone_lr_scale: 0.1
+  batch_size: 12
+  grad_accum_steps: 5
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.6
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.7
+  use_mixup: true
+  mixup_alpha: 0.4

@@ -175,20 +175,9 @@ from models.dual_encoder import DualEncoder
 from models.bidirectional_frame_pair import BidirectionalFramePairNet
 from models.qwen_temporal_attn import QwenTemporalAttn
 from models.videomae_lora import VideoMAELoRA
-# Lazy: these depend on optional third-party packages (videomaev2 ckpt fetch,
-# `hiera` lib) not present on every remote venv. Import on demand in
-# build_model() instead of at module load to avoid bringing down the whole
-# trainer when an unrelated experiment is being run.
-try:
-    from models.videomaev2_giant import VideoMAEv2Giant
-except Exception as _e_v2g:
-    VideoMAEv2Giant = None
-    print(f"[lazy-import] videomaev2_giant unavailable ({_e_v2g.__class__.__name__})")
-try:
-    from models.hiera_huge_wrapper import HieraHuge
-except Exception as _e_hh:
-    HieraHuge = None
-    print(f"[lazy-import] hiera_huge_wrapper unavailable ({_e_hh.__class__.__name__})")
+from models.videomaev2_giant import VideoMAEv2Giant
+from models.timesformer_ssv2 import TimesFormerSSv2
+from models.hiera_huge_wrapper import HieraHuge
 from models.qwen_lora import QwenVLLoRA
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
@@ -472,8 +461,6 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=int(cfg.model.get("head_hidden", 512)),
         )
     if name == "hiera_huge":
-        if HieraHuge is None:
-            raise RuntimeError("hiera_huge requested but `hiera` package not installed in this venv")
         return HieraHuge(
             num_classes=int(cfg.model.num_classes),
             variant=str(cfg.model.get("variant", "frozen")),
@@ -483,10 +470,21 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=int(cfg.model.get("head_hidden", 0)),
             dropout=float(cfg.model.get("dropout", 0.3)),
             num_frozen_stages=int(cfg.model.get("num_frozen_stages", 3)),
+            model_size=str(cfg.model.get("model_size", "huge")),
+        )
+    if name == "timesformer_ssv2":
+        return TimesFormerSSv2(
+            num_classes=int(cfg.model.num_classes),
+            variant=str(cfg.model.get("variant", "frozen")),
+            backbone=str(cfg.model.get("backbone", "facebook/timesformer-base-finetuned-ssv2")),
+            lora_rank=int(cfg.model.get("lora_rank", 16)),
+            lora_alpha=float(cfg.model.get("lora_alpha", 32.0)),
+            head_hidden=int(cfg.model.get("head_hidden", 0)),
+            dropout=float(cfg.model.get("dropout", 0.3)),
+            num_frames=int(cfg.model.get("num_frames", 8)),
+            image_size=int(cfg.model.get("image_size", 224)),
         )
     if name == "videomaev2_giant":
-        if VideoMAEv2Giant is None:
-            raise RuntimeError("videomaev2_giant requested but model module failed to import")
         return VideoMAEv2Giant(
             num_classes=int(cfg.model.num_classes),
             variant=str(cfg.model.get("variant", "frozen")),

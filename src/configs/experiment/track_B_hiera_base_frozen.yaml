@@ -1,0 +1,32 @@
+# @package _global_
+# Hiera-Base 16x224 K400-pretrained (51M, 74% K400). Fits 130W facilement.
+# FROZEN variant — tête seule entraînée.
+defaults:
+  - override /model: hiera_base
+
+model:
+  variant: "frozen"
+  model_size: "base"
+  head_hidden: 1024
+  dropout: 0.3
+
+training:
+  epochs: 30
+  lr: 5.0e-4
+  batch_size: 16
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.6
+  color_strength: 0.3
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.3

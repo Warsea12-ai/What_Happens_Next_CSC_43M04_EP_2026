@@ -1,0 +1,10 @@
+name: timesformer_ssv2
+num_classes: 33
+variant: frozen
+backbone: "facebook/timesformer-base-finetuned-ssv2"
+lora_rank: 16
+lora_alpha: 32.0
+head_hidden: 0
+dropout: 0.3
+num_frames: 8
+image_size: 224

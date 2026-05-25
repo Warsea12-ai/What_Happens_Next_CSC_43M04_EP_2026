@@ -104,14 +104,22 @@ class HieraHuge(nn.Module):
         head_hidden: int = 0,
         dropout: float = 0.3,
         num_frozen_stages: int = 3,  # Hiera a 4 stages ; 3 frozen = dernière trainable
+        model_size: str = "huge",     # "huge" (672M, 350W) ou "base" (51M, fits 130W) ou "large"
     ) -> None:
         super().__init__()
         if variant not in self._VARIANTS:
             raise ValueError(f"variant doit être dans {self._VARIANTS}, reçu {variant!r}")
         self.variant = variant
 
-        # 1. Backbone Hiera-Huge K400-pretrained (174M params, K400 76.0%)
-        self.backbone = hiera.hiera_huge_16x224(
+        # 1. Backbone Hiera K400-pretrained — factory selon model_size
+        factories = {
+            "huge":  hiera.hiera_huge_16x224,   # 672M, 76% K400, exige 350W idéalement
+            "large": hiera.hiera_large_16x224,  # 213M, 75% K400, fits 230W
+            "base":  hiera.hiera_base_16x224,   # 51M,  74% K400, fits 130W
+        }
+        if model_size not in factories:
+            raise ValueError(f"model_size doit être dans {list(factories)}, reçu {model_size!r}")
+        self.backbone = factories[model_size](
             pretrained=pretrained,
             checkpoint="mae_k400_ft_k400",
             strict=False,
