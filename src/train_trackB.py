@@ -201,6 +201,28 @@ from models.vjepa2_llama3_vlm import VJEPA2Llama3VLM
 from models.qwen25vl_3b_video import Qwen25VL3BVideo
 from models.internvl25_4b_video import InternVL25_4BVideo
 from models.videomae_multiscale_lora_temporal import VideoMAEMultiScaleLoRATemporal
+# Non-transformer CNN baselines (added for ensemble diversity) — lazy to avoid
+# pulling torchvision/pytorchvideo if not requested.
+try:
+    from models.R2Plus1D import R2Plus1D
+except Exception as _e_r2:
+    R2Plus1D = None
+    print(f"[lazy-import] R2Plus1D unavailable ({_e_r2.__class__.__name__})")
+try:
+    from models.X3D import X3D
+except Exception as _e_x3d:
+    X3D = None
+    print(f"[lazy-import] X3D unavailable ({_e_x3d.__class__.__name__})")
+try:
+    from models.mvit_v2_ssv2 import MViTV2SSv2
+except Exception as _e_mvit:
+    MViTV2SSv2 = None
+    print(f"[lazy-import] MViTV2SSv2 unavailable ({_e_mvit.__class__.__name__})")
+try:
+    from models.xclip_video import XCLIPVideo
+except Exception as _e_xclip:
+    XCLIPVideo = None
+    print(f"[lazy-import] XCLIPVideo unavailable ({_e_xclip.__class__.__name__})")
 from utils import build_transforms, log_wandb_diagnostics, measure_grad_norm, set_seed, split_train_val
 from gpu_wait import wait_for_gpu_memory, run_with_oom_retry, free_mb as gpu_free_mb
 
@@ -786,6 +808,46 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.3)),
             use_gradient_checkpointing=bool(cfg.model.get("use_gradient_checkpointing", True)),
             pixel_shuffle_scale=float(cfg.model.get("pixel_shuffle_scale", 0.5)),
+        )
+    if name == "R2Plus1D":
+        if R2Plus1D is None:
+            raise RuntimeError("R2Plus1D requested but torchvision.models.video import failed")
+        return R2Plus1D(
+            num_classes=int(cfg.model.num_classes),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+        )
+    if name == "X3D":
+        if X3D is None:
+            raise RuntimeError("X3D requested but pytorchvideo import failed")
+        return X3D(
+            num_classes=int(cfg.model.num_classes),
+            input_clip_length=int(cfg.dataset.num_frames),
+            variant=str(cfg.model.get("variant", "xs")),
+            dropout=float(cfg.model.get("dropout", 0.5)),
+            use_frame_diff=bool(cfg.model.get("use_frame_diff", False)),
+            drop_path_rate=float(cfg.model.get("stochastic_depth", 0.2)),
+        )
+    if name == "mvit_v2_ssv2":
+        if MViTV2SSv2 is None:
+            raise RuntimeError("mvit_v2_ssv2 requested but MViT model unavailable")
+        return MViTV2SSv2(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/mvit-base-finetuned-ssv2")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 0)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            interp_mode=str(cfg.model.get("interp_mode", "aligned")),
+        )
+    if name == "xclip_video":
+        if XCLIPVideo is None:
+            raise RuntimeError("xclip_video requested but XCLIPModel unavailable")
+        return XCLIPVideo(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "microsoft/xclip-base-patch32-16-frames")),
+            num_frozen_blocks=int(cfg.model.get("num_frozen_blocks", 0)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 1024)),
+            interp_mode=str(cfg.model.get("interp_mode", "aligned")),
         )
     raise ValueError(f"Unknown model.name for Track B: {name!r}")
 

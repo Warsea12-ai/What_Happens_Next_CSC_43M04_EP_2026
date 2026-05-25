@@ -1,0 +1,35 @@
+# @package _global_
+# X-CLIP base : baseline avec recipe Prodigy + EMA.
+defaults:
+  - override /model: xclip_video
+model:
+  backbone: "microsoft/xclip-base-patch32-16-frames"
+  num_frozen_blocks: 0
+  dropout: 0.25
+  head_hidden: 1024
+  interp_mode: "aligned"
+training:
+  epochs: 15
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 4
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 2
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_ema: true
+  ema_decay: 0.999
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

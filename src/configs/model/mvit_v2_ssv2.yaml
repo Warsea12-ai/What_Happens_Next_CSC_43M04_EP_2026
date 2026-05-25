@@ -1,0 +1,7 @@
+name: mvit_v2_ssv2
+num_classes: 33
+backbone: "facebook/mvit-base-finetuned-ssv2"
+num_frozen_blocks: 0
+dropout: 0.25
+head_hidden: 1024
+interp_mode: "aligned"

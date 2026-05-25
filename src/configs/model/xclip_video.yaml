@@ -1,0 +1,7 @@
+name: xclip_video
+num_classes: 33
+backbone: "microsoft/xclip-base-patch32-16-frames"
+num_frozen_blocks: 0
+dropout: 0.25
+head_hidden: 1024
+interp_mode: "aligned"

@@ -60,6 +60,10 @@ _TRACK_B_MODELS = {
     "vjepa2_vitl_dup",
     "vjepa2_vitg_dup",
     "vjepa2_vitl_raft",
+    "R2Plus1D",
+    "X3D",
+    "mvit_v2_ssv2",
+    "xclip_video",
 }
 
 
