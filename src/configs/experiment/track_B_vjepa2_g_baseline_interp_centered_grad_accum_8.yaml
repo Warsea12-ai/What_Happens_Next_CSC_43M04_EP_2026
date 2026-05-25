@@ -1,0 +1,37 @@
+# @package _global_
+# V-JEPA-G : 2 leviers V-JEPA-G stackés (interp_centered + grad_accum réduit).
+# Tests si les gains se cumulent comme sur VideoMAE (où le stack donnait
+# ~0.741 vs 0.738 baseline). Si gains additifs : 0.7439 + 1pp + 0.3pp = ~0.757.
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 24
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "centered"
+
+training:
+  epochs: 25
+  lr: 3.0e-4
+  backbone_lr_scale: 0.2
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
