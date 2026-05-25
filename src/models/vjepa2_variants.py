@@ -130,6 +130,38 @@ class VJEPA2Variant(nn.Module):
                 nn.Dropout(dropout * 0.5),
                 nn.Linear(head_hidden, num_classes),
             )
+        elif variant == "multi_query":
+            # 8 requêtes apprises au lieu d'1 → diff. "vues" des tokens →
+            # concat + projection. Tête type Perceiver-IO.
+            n_queries = 8
+            self.queries = nn.Parameter(torch.randn(1, n_queries, hidden) * 0.02)
+            self.cross_attn = nn.MultiheadAttention(hidden, num_heads=8, batch_first=True)
+            self.query_norm = nn.LayerNorm(hidden)
+            self.head = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(hidden * n_queries, head_hidden),
+                nn.GELU(),
+                nn.Dropout(dropout * 0.5),
+                nn.Linear(head_hidden, num_classes),
+            )
+        elif variant == "time_split":
+            # V-JEPA 2 a tubelet_size=2 sur 16 frames → 8 groupes temporels.
+            # On split les 1568 tokens (ou 2048) en 8 groupes, mean-pool chacun,
+            # puis petit transformer 2-layer sur les 8 vecteurs → CLS → linear.
+            self.n_time_groups = 8  # tubelets temporels de V-JEPA 2
+            tx_layer = nn.TransformerEncoderLayer(
+                d_model=hidden, nhead=8, dim_feedforward=hidden * 2,
+                dropout=dropout, batch_first=True, activation="gelu",
+            )
+            self.time_transformer = nn.TransformerEncoder(tx_layer, num_layers=2)
+            self.time_cls = nn.Parameter(torch.randn(1, 1, hidden) * 0.02)
+            self.head = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(hidden, head_hidden),
+                nn.GELU(),
+                nn.Dropout(dropout * 0.5),
+                nn.Linear(head_hidden, num_classes),
+            )
         elif variant == "deep_head":
             # 2 couches cachées : 1408 → 2048 → 1024 → 33
             self.head = nn.Sequential(
@@ -175,9 +207,15 @@ class VJEPA2Variant(nn.Module):
 
     def head_parameters(self):
         params = []
-        for name in ("head", "pool", "ms_proj"):
+        for name in ("head", "pool", "ms_proj",
+                     "queries", "cross_attn", "query_norm",         # multi_query
+                     "time_transformer", "time_cls"):                # time_split
             if hasattr(self, name):
-                params += list(getattr(self, name).parameters())
+                mod = getattr(self, name)
+                if isinstance(mod, nn.Parameter):
+                    params.append(mod)
+                else:
+                    params += list(mod.parameters())
         return params
 
     def backbone_parameters(self):
@@ -221,6 +259,27 @@ class VJEPA2Variant(nn.Module):
 
         if self.variant == "attn_pool":
             feat = self.pool(h)
+        elif self.variant == "multi_query":
+            # Cross-attention : (B, n_queries, hidden) ← attends sur les tokens
+            q = self.queries.expand(h.size(0), -1, -1)
+            attn_out, _ = self.cross_attn(q, h, h)
+            attn_out = self.query_norm(attn_out)                     # (B, n_queries, hidden)
+            feat = attn_out.flatten(start_dim=1)                     # (B, n_queries*hidden)
+        elif self.variant == "time_split":
+            # Sépare les tokens en n_time_groups groupes temporels, mean-pool chacun.
+            # V-JEPA 2 tokens shape : (B, T_t * H_s * W_s, C). Pour un clip 16 frames
+            # avec tubelet_size=2 → T_t=8. On split sur la dim seq.
+            B, N, C = h.shape
+            ng = self.n_time_groups
+            group_size = N // ng
+            usable = group_size * ng
+            h_trunc = h[:, :usable]                                  # tronque pour exact split
+            h_grouped = h_trunc.view(B, ng, group_size, C).mean(dim=2)  # (B, ng, C)
+            # Prepend CLS, run transformer
+            cls = self.time_cls.expand(B, -1, -1)
+            seq = torch.cat([cls, h_grouped], dim=1)                 # (B, ng+1, C)
+            seq = self.time_transformer(seq)
+            feat = seq[:, 0]                                          # CLS output (B, C)
         else:
             feat = h.mean(dim=1)
 

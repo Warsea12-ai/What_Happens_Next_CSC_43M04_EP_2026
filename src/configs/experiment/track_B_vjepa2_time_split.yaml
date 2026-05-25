@@ -1,0 +1,40 @@
+# @package _global_
+# V-JEPA 2 ViT-G + Time-split pooling (préserve l'ordre temporel)
+#
+# Split les ~2048 tokens en 8 groupes temporels (un par tubelet temporel
+# t=0..7), mean-pool chaque groupe → (B, 8, 1408). Petit transformer 2-layer
+# sur les 8 vecteurs avec un CLS token apprend l'ordre temporel.
+#
+# Le mean-pool global aplatit la dimension temporelle ; le time-split la
+# préserve. Crucial pour SSv2 où des paires direction-sensibles
+# (closing↔opening, lifting↔dropping) sont distinguées uniquement par
+# l'ordre temporel.
+defaults:
+  - override /model: vjepa2_variants
+model:
+  variant: "time_split"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4

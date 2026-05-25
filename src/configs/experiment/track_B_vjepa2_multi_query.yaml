@@ -1,0 +1,39 @@
+# @package _global_
+# V-JEPA 2 ViT-G + Multi-query Perceiver-IO pooler (8 requêtes apprises au lieu d'1)
+#
+# Variante de vjepa2_attn_pool : remplace la requête unique par 8 queries qui
+# attendent en cross-attention sur les ~2048 tokens. Chaque query peut se
+# spécialiser sur un aspect (main, objet, mouvement, contexte, etc.).
+# Concat des 8 features puis projection → tête classification.
+#
+# Inspiré de Perceiver-IO et Flamingo. Plus de capacité dans la tête à
+# capter des aspects différents des tokens (vs mean ou single-query attn).
+defaults:
+  - override /model: vjepa2_variants
+model:
+  variant: "multi_query"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  lr: 1.0e-4
+  backbone_lr_scale: 0.05
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: true
+  use_augment: true
+  color_prob: 0.8
+  color_strength: 0.35
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.6
+  use_mixup: true
+  mixup_alpha: 0.4
