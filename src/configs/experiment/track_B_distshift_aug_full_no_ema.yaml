@@ -1,0 +1,42 @@
+# @package _global_
+# [Lever #10] All augmentations + NO EMA. Test pour isoler si EMA hurts when
+# augmentations are active. EMA stabilise les poids - peut bloquer
+# l'apprentissage de l'augmentation. Si ce config bat aug_full+EMA → EMA off
+# devient la nouvelle baseline pour les configs avec aug.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "centered"
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_ema: false
+  ema_decay: 0.999
+  use_random_resized_crop: true
+  rrc_scale_min: 0.7
+  rrc_scale_max: 1.0
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.25
+  blur_prob: 0.15
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

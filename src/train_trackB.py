@@ -159,7 +159,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig, OmegaConf
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from dataset.video_dataset import VideoFrameDataset, collect_video_samples
 from models.cnn_temporal import CNNTemporal
@@ -1054,11 +1054,33 @@ def main(cfg: DictConfig) -> None:
         transform=eval_transform, sample_list=val_samples,
     )
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=int(cfg.training.batch_size), shuffle=True,
-        num_workers=int(cfg.training.num_workers), pin_memory=(device.type == "cuda"),
-        persistent_workers=True,
-    )
+    # Optional class-balanced sampling : remplace shuffle=True par un
+    # WeightedRandomSampler qui équilibre la fréquence d'apparition de chaque classe.
+    # Effet : ~uniforme par classe (chaque classe a la même proba à chaque step),
+    # défait l'imbalance train interne ET attaque le distribution shift train->val.
+    _train_labels = [int(s[1]) for s in train_samples]
+    _use_balanced = bool(cfg.training.get("class_balanced_sampling", False))
+    if _use_balanced:
+        _per_class = {}
+        for _l in _train_labels:
+            _per_class[_l] = _per_class.get(_l, 0) + 1
+        # Poids par sample = 1/count_classe (puis normalisé)
+        _sample_w = [1.0 / _per_class[_l] for _l in _train_labels]
+        _sampler = WeightedRandomSampler(_sample_w, num_samples=len(_sample_w),
+                                          replacement=True)
+        train_loader = DataLoader(
+            train_dataset, batch_size=int(cfg.training.batch_size), sampler=_sampler,
+            num_workers=int(cfg.training.num_workers), pin_memory=(device.type == "cuda"),
+            persistent_workers=True,
+        )
+        print(f"  Class-balanced sampling activé : {len(_per_class)} classes, "
+              f"max/min count = {max(_per_class.values())}/{min(_per_class.values())}")
+    else:
+        train_loader = DataLoader(
+            train_dataset, batch_size=int(cfg.training.batch_size), shuffle=True,
+            num_workers=int(cfg.training.num_workers), pin_memory=(device.type == "cuda"),
+            persistent_workers=True,
+        )
     val_loader = DataLoader(
         val_dataset, batch_size=int(cfg.training.batch_size), shuffle=False,
         num_workers=int(cfg.training.num_workers), pin_memory=(device.type == "cuda"),
@@ -1100,16 +1122,48 @@ def main(cfg: DictConfig) -> None:
     _class_weights_cfg = cfg.training.get("class_weights", None)
     _loss_weight: torch.Tensor | None = None
     if _class_weights_cfg is not None:
+        _num_classes = int(cfg.model.num_classes)
         if isinstance(_class_weights_cfg, str) and _class_weights_cfg == "auto_confusion":
-            _num_classes = int(cfg.model.num_classes)
             _cw = torch.ones(_num_classes, dtype=torch.float32, device=device)
-            # Boost recall on classes whose true samples leak heavily to others.
             for _c, _boost in [(9, 1.4), (11, 1.4), (25, 1.4),
                                (16, 1.25), (2, 1.25), (18, 1.2), (3, 1.2)]:
                 if _c < _num_classes:
                     _cw[_c] = _boost
             _loss_weight = _cw
             print(f"  Class weights: auto_confusion → boosted {(_cw > 1.0).sum().item()} classes")
+        elif isinstance(_class_weights_cfg, str) and _class_weights_cfg == "inverse_freq":
+            # Inverse frequency from train labels — rééquilibre l'apprentissage
+            # vers les classes rares dans train.
+            _per_class = {}
+            for _l in (int(s[1]) for s in train_samples):
+                _per_class[_l] = _per_class.get(_l, 0) + 1
+            _cw = torch.ones(_num_classes, dtype=torch.float32, device=device)
+            for _c in range(_num_classes):
+                _cw[_c] = 1.0 / max(_per_class.get(_c, 1), 1)
+            # Normalise pour que la moyenne soit 1 (évite que la LR effective change)
+            _cw *= _num_classes / _cw.sum()
+            print(f"  Class weights: inverse_freq → max/min = {_cw.max():.2f}/{_cw.min():.2f}")
+            _loss_weight = _cw
+        elif isinstance(_class_weights_cfg, str) and _class_weights_cfg == "val_aware":
+            # Aligne la distribution training vers la distribution val_dir.
+            # Ratios calculés depuis frames_new (deeplearning) :
+            #   ratio[c] = freq_val[c] / freq_train[c]
+            # Classes UNDER-rep en val (ratio < 0.7) → poids réduit (modèle prédit
+            # moins ces classes). OVER-rep (ratio > 1.5) → poids augmenté.
+            _ratios = {
+                0:1.42, 1:1.02, 2:1.32, 3:1.96, 4:0.90, 5:0.90, 6:1.34, 7:1.57,
+                8:0.76, 9:0.76, 10:1.77, 11:1.35, 12:2.12, 13:1.68, 14:0.98,
+                15:1.19, 16:0.43, 17:0.34, 18:0.73, 19:0.53, 20:0.70, 21:1.08,
+                22:0.89, 23:0.67, 24:0.58, 25:2.46, 26:2.47, 28:0.94, 29:0.54,
+                30:1.27, 31:0.86, 32:1.71,
+            }
+            _cw = torch.ones(_num_classes, dtype=torch.float32, device=device)
+            for _c, _r in _ratios.items():
+                if _c < _num_classes:
+                    _cw[_c] = _r
+            _cw *= _num_classes / _cw.sum()
+            print(f"  Class weights: val_aware → max/min = {_cw.max():.2f}/{_cw.min():.2f}")
+            _loss_weight = _cw
         else:
             _loss_weight = torch.tensor(list(_class_weights_cfg),
                                         dtype=torch.float32, device=device)
