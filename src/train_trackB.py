@@ -569,6 +569,7 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
             drop_path_rate=float(cfg.model.get("drop_path_rate", 0.0)),
+            interp_mode=str(cfg.model.get("interp_mode", "aligned")),
         )
     if name == "internvideo2":
         return InternVideo2(

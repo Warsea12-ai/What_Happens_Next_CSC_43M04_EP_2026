@@ -46,6 +46,8 @@ import torch
 import torch.nn as nn
 from transformers import VJEPA2Model
 
+from temporal_interp import interp_temporal
+
 _TARGET_FRAMES = 16
 
 
@@ -105,10 +107,14 @@ class VJEPA2Head(nn.Module):
         dropout: float = 0.25,
         head_hidden: int = 2048,
         drop_path_rate: float = 0.0,
+        interp_mode: str = "aligned",
     ) -> None:
         super().__init__()
         self.num_frozen_blocks = num_frozen_blocks
         self.drop_path_rate = float(drop_path_rate)
+        if interp_mode not in ("aligned", "centered", "repeat"):
+            raise ValueError(f"interp_mode must be aligned|centered|repeat, got {interp_mode!r}")
+        self.interp_mode = interp_mode
 
         # Load full VJEPA2Model then keep only the encoder (discard the JEPA predictor)
         full = VJEPA2Model.from_pretrained(
@@ -197,7 +203,7 @@ class VJEPA2Head(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         dtype = x.dtype
-        x = _linear_upsample(x, _TARGET_FRAMES)
+        x = interp_temporal(x, target_T=_TARGET_FRAMES, mode=self.interp_mode)
 
         # ── Frozen part: embeddings + blocks 0…(num_frozen-1) in no_grad ──────
         # torch.no_grad() prevents activation graph storage for frozen layers,
