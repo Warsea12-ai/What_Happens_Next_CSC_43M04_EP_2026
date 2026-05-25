@@ -1,0 +1,9 @@
+name: hiera_huge
+num_classes: 33
+variant: frozen
+pretrained: true
+lora_rank: 16
+lora_alpha: 32.0
+head_hidden: 0
+dropout: 0.3
+num_frozen_stages: 3

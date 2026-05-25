@@ -1,0 +1,9 @@
+name: videomaev2_giant
+num_classes: 33
+variant: frozen
+checkpoint_path: "/Data/What_Happens_Next_CSC_43M04_EP_2026/checkpoints/videomaev2_vitg_ssv2_ft.pth"
+num_frozen_blocks: 32
+lora_rank: 16
+lora_alpha: 32.0
+head_hidden: 0
+dropout: 0.3
