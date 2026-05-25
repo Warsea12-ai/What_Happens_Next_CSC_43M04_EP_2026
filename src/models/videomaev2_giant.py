@@ -129,14 +129,20 @@ class VideoMAEv2Giant(nn.Module):
             drop_path_rate=0.2,
         )
 
-        # 2. Chargement des poids SSv2-finetuned
+        # 2. Chargement des poids SSv2-finetuned. Le ckpt fait 2 GB et n'est pas
+        # forcément déjà présent sur le host (chaque host a son propre /Data,
+        # pas de NFS partagé). On utilise hf_hub_download qui gère un cache
+        # par-host transparent et résume les downloads interrompus.
         ckpt_p = Path(checkpoint_path)
         if not ckpt_p.exists():
-            raise FileNotFoundError(
-                f"Checkpoint introuvable : {ckpt_p}\n"
-                f"À télécharger : curl -fsSL -o {ckpt_p} "
-                f"https://huggingface.co/OpenGVLab/VideoMAE2/resolve/main/mae-g/vit_g_hybrid_pt_1200e_ssv2_ft.pth"
-            )
+            from huggingface_hub import hf_hub_download
+            print(f"[VideoMAEv2Giant] ckpt absent ({ckpt_p}) — download depuis HF...",
+                  flush=True)
+            ckpt_p = Path(hf_hub_download(
+                repo_id="OpenGVLab/VideoMAE2",
+                filename="mae-g/vit_g_hybrid_pt_1200e_ssv2_ft.pth",
+            ))
+            print(f"[VideoMAEv2Giant] download OK : {ckpt_p}", flush=True)
         ckpt = torch.load(ckpt_p, map_location="cpu", weights_only=False)
         sd = ckpt.get("module", ckpt.get("model", ckpt))
         msg = self.backbone.load_state_dict(sd, strict=False)
