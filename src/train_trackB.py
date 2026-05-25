@@ -175,8 +175,20 @@ from models.dual_encoder import DualEncoder
 from models.bidirectional_frame_pair import BidirectionalFramePairNet
 from models.qwen_temporal_attn import QwenTemporalAttn
 from models.videomae_lora import VideoMAELoRA
-from models.videomaev2_giant import VideoMAEv2Giant
-from models.hiera_huge_wrapper import HieraHuge
+# Lazy: these depend on optional third-party packages (videomaev2 ckpt fetch,
+# `hiera` lib) not present on every remote venv. Import on demand in
+# build_model() instead of at module load to avoid bringing down the whole
+# trainer when an unrelated experiment is being run.
+try:
+    from models.videomaev2_giant import VideoMAEv2Giant
+except Exception as _e_v2g:
+    VideoMAEv2Giant = None
+    print(f"[lazy-import] videomaev2_giant unavailable ({_e_v2g.__class__.__name__})")
+try:
+    from models.hiera_huge_wrapper import HieraHuge
+except Exception as _e_hh:
+    HieraHuge = None
+    print(f"[lazy-import] hiera_huge_wrapper unavailable ({_e_hh.__class__.__name__})")
 from models.qwen_lora import QwenVLLoRA
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
@@ -460,6 +472,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
             head_hidden=int(cfg.model.get("head_hidden", 512)),
         )
     if name == "hiera_huge":
+        if HieraHuge is None:
+            raise RuntimeError("hiera_huge requested but `hiera` package not installed in this venv")
         return HieraHuge(
             num_classes=int(cfg.model.num_classes),
             variant=str(cfg.model.get("variant", "frozen")),
@@ -471,6 +485,8 @@ def build_model(cfg: DictConfig) -> nn.Module:
             num_frozen_stages=int(cfg.model.get("num_frozen_stages", 3)),
         )
     if name == "videomaev2_giant":
+        if VideoMAEv2Giant is None:
+            raise RuntimeError("videomaev2_giant requested but model module failed to import")
         return VideoMAEv2Giant(
             num_classes=int(cfg.model.num_classes),
             variant=str(cfg.model.get("variant", "frozen")),
