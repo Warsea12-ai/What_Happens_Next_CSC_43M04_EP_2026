@@ -1,0 +1,44 @@
+# @package _global_
+# Recipe exacte du PDF de l'équipe externe : V-JEPA-2 × ViT-Large + dégel doux.
+# Setup reporté ~0.71 val_acc :
+#   - ViT-Large 300M (facebook/vjepa2-vitl-fpc64-256-ssv2)
+#   - 16 frames input (notre interp_repeat fait équivalent depuis 4)
+#   - AdamW + weight_decay=0.05
+#   - warmup_cosine (notre default)
+#   - backbone_lr_scale=0.03 ("dégel doux", +3pp clé)
+defaults:
+  - override /model: vjepa2_head
+
+model:
+  backbone: "facebook/vjepa2-vitl-fpc64-256-ssv2"
+  num_frozen_blocks: 0           # PDF dit "dégel doux" = tout dégelé avec LR bas
+  dropout: 0.25
+  head_hidden: 1024              # PDF dit 1024 -> 512 -> 33
+  interp_mode: "repeat"          # 4 frames dupliquées en 16
+training:
+  epochs: 20
+  optimizer: adamw
+  lr: 1.0e-4
+  backbone_lr_scale: 0.03        # PDF clé +3pp
+  llrd_factor: 1.0               # pas de LLRD, le dégel doux uniforme
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-2           # 0.05 PDF
+  label_smoothing: 0.0           # PDF ne mentionne pas de LS
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+  use_ema: false                 # PDF n'utilise pas EMA
+  use_random_resized_crop: true
+  rrc_scale_min: 0.7
+  rrc_scale_max: 1.0
+  use_augment: true              # PDF "Augmentation"
+  color_prob: 0.5
+  color_strength: 0.2
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
