@@ -1,0 +1,36 @@
+# @package _global_
+# X-CLIP ultra : ultra: dropout15 + mixup02 + ls02 + wd_e3.
+defaults:
+  - override /model: xclip_video
+model:
+  backbone: "microsoft/xclip-base-patch32-16-frames"
+  num_frozen_blocks: 0
+  dropout: 0.15
+  head_hidden: 1024
+  interp_mode: "repeat"
+training:
+  epochs: 15
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 4
+  grad_accum_steps: 8
+  weight_decay: 1.0e-3
+  label_smoothing: 0.2
+  warmup_epochs: 2
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_ema: true
+  ema_decay: 0.999
+  class_weights: "val_aware"
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: true
+  mixup_alpha: 0.2

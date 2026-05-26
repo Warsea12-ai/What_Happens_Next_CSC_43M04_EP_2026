@@ -1,0 +1,41 @@
+# @package _global_
+# V-JEPA-2 ViT-L lr_3e5 : LR 3e-5 (very low).
+defaults:
+  - override /model: vjepa2_head
+dataset:
+  num_frames: 4
+model:
+  backbone: "facebook/vjepa2-vitl-fpc64-256-ssv2"
+  num_frozen_blocks: 0
+  dropout: 0.25
+  head_hidden: 1024
+  interp_mode: "repeat"
+training:
+  epochs: 20
+  optimizer: adamw
+  lr: 3.0e-5
+  backbone_lr_scale: 0.03
+  llrd_factor: 1.0
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-2
+  label_smoothing: 0.0
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+  use_ema: false
+  ema_decay: 0.999
+
+  use_random_resized_crop: true
+  rrc_scale_min: 0.7
+  rrc_scale_max: 1.0
+  use_augment: true
+  color_prob: 0.5
+  color_strength: 0.2
+  blur_prob: 0.1
+  flip_prob: 0.5
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
