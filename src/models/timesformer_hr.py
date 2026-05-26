@@ -46,9 +46,9 @@ _TSF_MEAN = torch.tensor([0.45, 0.45, 0.45]).view(1, 1, 3, 1, 1)
 _TSF_STD  = torch.tensor([0.225, 0.225, 0.225]).view(1, 1, 3, 1, 1)
 
 _TARGET_FRAMES = 16
-_HR_SIZE       = 448
-_PATCH_SIZE    = 16      # default for timesformer-hr
-_N_SPATIAL     = (_HR_SIZE // _PATCH_SIZE) ** 2   # 28*28 = 784
+# image_size + patch_size are read from the loaded model config now, so this
+# class works for both timesformer-hr (448×448 → 784 patches) and
+# timesformer-base (224×224 → 196 patches).
 _N_FRAMES      = 4
 _PAIRS         = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
 
@@ -92,6 +92,13 @@ class TimeSformerHR(nn.Module):
 
         # Body uniquement (pas la head 174-classes pré-entraînée SSv2)
         self.encoder = TimesformerModel.from_pretrained(backbone, use_safetensors=True)
+
+        # Adapte spatial layout au backbone (base=224/16=14² ; HR=448/16=28²)
+        self.image_size = int(getattr(self.encoder.config, "image_size", 224))
+        self.patch_size = int(getattr(self.encoder.config, "patch_size", 16))
+        self.n_spatial  = (self.image_size // self.patch_size) ** 2
+        print(f"  TimeSformer config: image_size={self.image_size} "
+              f"patch_size={self.patch_size} n_spatial={self.n_spatial}")
 
         # Freeze patch embeddings, num_classes head non chargée car on prend juste le body.
         for p in self.encoder.embeddings.parameters():
@@ -186,14 +193,15 @@ class TimeSformerHR(nn.Module):
         x = interp_temporal(x, target_T=_TARGET_FRAMES, mode=self.interp_mode)
         # x : (B, 16, C, H, W)
 
-        # Resize to 448×448 (HR variant) — TimeSformer-HR expects this.
+        # Resize to model's native resolution (224 for base, 448 for HR)
+        target_size = self.image_size
         B_, T_, C_, H_, W_ = x.shape
-        if H_ != _HR_SIZE or W_ != _HR_SIZE:
+        if H_ != target_size or W_ != target_size:
             x = F.interpolate(
                 x.view(B_ * T_, C_, H_, W_),
-                size=(_HR_SIZE, _HR_SIZE),
+                size=(target_size, target_size),
                 mode="bilinear", align_corners=False,
-            ).view(B_, T_, C_, _HR_SIZE, _HR_SIZE)
+            ).view(B_, T_, C_, target_size, target_size)
 
         # TimeSformer attend (B, T, C, H, W) → output last_hidden_state (B, 1+T*N, hidden)
         out = self.encoder(pixel_values=x)
@@ -201,16 +209,16 @@ class TimeSformerHR(nn.Module):
         # Drop CLS
         tokens = tokens[:, 1:]                    # (B, T*N, hidden)
         D = tokens.shape[-1]
-        tokens = tokens.view(B, _TARGET_FRAMES, _N_SPATIAL, D)  # (B, 16, 784, hidden)
+        tokens = tokens.view(B, _TARGET_FRAMES, self.n_spatial, D)
 
         # Pick 4 "frame anchor" positions out of 16 — same positions that interp_temporal
         # places the input frames at (aligned mode: [0,5,10,15]).
         # For other modes we keep the simple [0,5,10,15] mapping as a robust default.
         anchor_idx = [0, 5, 10, 15]
-        frame_tokens = tokens[:, anchor_idx]      # (B, 4, 784, hidden)
+        frame_tokens = tokens[:, anchor_idx]      # (B, 4, n_spatial, hidden)
 
         # Spatial attention pool : 1 query per frame
-        ft_flat = frame_tokens.reshape(B * _N_FRAMES, _N_SPATIAL, D)
+        ft_flat = frame_tokens.reshape(B * _N_FRAMES, self.n_spatial, D)
         q = self.spatial_query.expand(B * _N_FRAMES, 1, D)
         attn_w = torch.softmax(
             torch.bmm(q, ft_flat.transpose(1, 2)) / math.sqrt(D), dim=-1)
