@@ -1,0 +1,40 @@
+# @package _global_
+# V-JEPA 2 ViT-G + time_split head + EMA + aug-off (winner recipe).
+#
+# Combine la nouveauté "8 groupes temporels + transformer + CLS" avec EMA
+# decay 0.999 et aucune augmentation. Préserver l'ordre temporel devrait
+# particulièrement aider sur les paires direction-sensibles (closing↔opening).
+defaults:
+  - override /model: vjepa2_variants
+model:
+  variant: "time_split"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_ema: true
+  ema_decay: 0.999
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

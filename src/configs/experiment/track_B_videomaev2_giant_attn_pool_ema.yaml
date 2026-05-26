@@ -1,0 +1,36 @@
+# @package _global_
+# VideoMAE V2 Giant + attn_pool + EMA + aug-off (winner recipe).
+defaults:
+  - override /model: videomaev2_giant
+model:
+  variant: "attn_pool"
+  num_frozen_blocks: 32
+  head_hidden: 1024
+  dropout: 0.25
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.85
+  batch_size: 2
+  grad_accum_steps: 16     # effective batch 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_ema: true
+  ema_decay: 0.999
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

@@ -1,0 +1,42 @@
+# @package _global_
+# V-JEPA 2 ViT-G + multi_query head + EMA + aug-off (winner recipe).
+#
+# Combine la nouveauté "8 queries Perceiver-IO" avec la recette gagnante
+# observée sur VideoMAE (val_dir 0.594) : EMA decay 0.999, aucune
+# augmentation (les augs apparence dégradent les backbones SSv2-pretrained),
+# Prodigy optimizer (LR adaptatif).
+defaults:
+  - override /model: vjepa2_variants
+model:
+  variant: "multi_query"
+  num_frozen_blocks: 32
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 8       # effective batch 32 (~adapté ViT-G 24 GB)
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_ema: true
+  ema_decay: 0.999
+
+  # Aug entièrement off (aug_off winner pattern)
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

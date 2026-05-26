@@ -1,0 +1,45 @@
+# @package _global_
+# InternVideo2-1B-SSv2 + Cross-Attention Pairs + EMA + aug-off.
+# Variante de track_B_internvideo2_pairs avec le winner recipe.
+defaults:
+  - override /model: internvideo2_pairs
+model:
+  backbone: "OpenGVLab/InternVideo2-Stage1-1B-224p-f8-SthSth"
+  backbone_dtype: "bfloat16"
+  use_lora: false
+  lora_rank: 0
+  lora_alpha: 0.0
+  perceiver_heads: 8
+  n_temporal_layers: 3
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.0
+  batch_size: 4
+  grad_accum_steps: 8
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_ema: true
+  ema_decay: 0.999
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
+  wandb_watch: false
+  num_workers: 4
