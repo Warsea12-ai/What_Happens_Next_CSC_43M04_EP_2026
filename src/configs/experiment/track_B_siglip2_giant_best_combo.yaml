@@ -1,0 +1,49 @@
+# @package _global_
+# SigLIP-2 Giant (~1B params, sigmoid contrastive image-text pretraining,
+# release mars 2025) + cross-attn pairs head. Backbone frozen, recette
+# best_combo_v2-style adaptée pour un encoder frozen (Prodigy sur la head).
+#
+# Pretraining radicalement distinct des backbones déjà testés :
+#   - VideoMAE / V-JEPA2 / DINOv3 : objectif de reconstruction / joint-embedding
+#   - SigLIP-2 : contrastive image-text (sigmoid loss, billions of pairs)
+# → erreurs décorrélées attendues → précieux pour l'ensemble final.
+defaults:
+  - override /model: siglip2_giant_pairs
+
+model:
+  backbone: "google/siglip2-giant-opt-patch16-384"
+  backbone_dtype: "bfloat16"
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+
+training:
+  epochs: 30
+  optimizer: prodigy
+  lr: 1.0
+  # backbone frozen → backbone_lr_scale et llrd_factor ignorés (head_parameters
+  # uniquement). Recette best_combo_v2 préservée pour le reste.
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 4
+  grad_accum_steps: 16        # effective batch = 64
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
+
+  early_stop_patience: 8
+  num_workers: 2

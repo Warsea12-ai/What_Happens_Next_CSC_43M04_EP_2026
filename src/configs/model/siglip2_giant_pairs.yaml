@@ -1,0 +1,8 @@
+name: siglip2_giant_pairs
+num_classes: 33
+backbone: "google/siglip2-giant-opt-patch16-384"
+backbone_dtype: "bfloat16"
+n_temporal_layers: 2
+n_heads: 8
+dropout: 0.25
+head_hidden: 2048

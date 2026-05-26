@@ -180,6 +180,7 @@ from models.timesformer_ssv2 import TimesFormerSSv2
 from models.hiera_huge_wrapper import HieraHuge
 from models.qwen_lora import QwenVLLoRA
 from models.timesformer_hr import TimeSformerHR
+from models.siglip2_giant_pairs import SigLIP2GiantPairs
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from models.videomae_pair_attn import VideoMAEPairAttn
@@ -581,6 +582,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
             dropout=float(cfg.model.get("dropout", 0.25)),
             head_hidden=int(cfg.model.get("head_hidden", 2048)),
             interp_mode=str(cfg.model.get("interp_mode", "aligned")),
+        )
+    if name == "siglip2_giant_pairs":
+        return SigLIP2GiantPairs(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "google/siglip2-giant-opt-patch16-384")),
+            backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
         )
     if name == "videomae_cross_attn_pairs":
         return VideoMAECrossAttnPairs(
