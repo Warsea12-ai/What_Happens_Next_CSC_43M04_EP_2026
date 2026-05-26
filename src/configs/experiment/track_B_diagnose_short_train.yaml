@@ -1,0 +1,42 @@
+# @package _global_
+# DIAGNOSE — Hypothèse "biais de sélection sur 20 epochs" :
+# stop à epoch 6, on prend le best mais avec moins d'opportunités de peak
+# vers train_holdout.
+#
+# Attendu : val/acc wandb ↘ (moins d'epochs pour optimiser train_holdout),
+# evaluate.py ↘ proportionnellement moins → gap ↘.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "centered"
+training:
+  epochs: 6            # ← 6 vs 20 (peu d'opportunités de surfit holdout)
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 2     # warmup proportionnellement raccourci
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_ema: true
+  ema_decay: 0.99      # decay plus rapide (horizon 100 step → adapté à 6 epochs)
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0

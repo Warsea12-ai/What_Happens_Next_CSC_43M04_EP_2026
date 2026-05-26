@@ -1,0 +1,44 @@
+# @package _global_
+# DIAGNOSE — Hypothèse "déséquilibre des classes train↔val" :
+# pondère la cross-entropy par 1/freq_val (la distribution réelle de val_dir).
+# Le modèle est forcé d'apprendre les classes sous-représentées en train
+# mais nombreuses en val (e.g. 030_Turning_upside_down : 4.57% train vs 5.79% val).
+#
+# Attendu : val/acc wandb ↘ légèrement (loss différente), evaluate.py ↗ significatif
+# → gap ↘ si la cause est vraiment le class-shift.
+defaults:
+  - override /model: videomae_cross_attn_pairs
+model:
+  backbone: "MCG-NJU/videomae-base-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "centered"
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  batch_size: 8
+  grad_accum_steps: 4
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_ema: true
+  ema_decay: 0.997
+  class_weights: "val_aware"   # ← weights = 1/freq_val (calculé depuis val_dir)
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
