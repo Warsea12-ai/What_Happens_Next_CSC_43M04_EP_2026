@@ -39,9 +39,13 @@ class XCLIPVideo(nn.Module):
         self.interp_mode = interp_mode
 
         full = XCLIPModel.from_pretrained(backbone, use_safetensors=True)
-        # Keep ONLY the video-aware vision encoder (drop text + projection layers)
-        self.vision_model     = full.vision_model       # CLIP ViT-B/32
-        self.mit              = full.mit                # multiframe integration transformer
+        # Keep the vision encoder + visual_projection (needed to convert
+        # vision_hidden_size=768 → projection_dim=512 expected by MIT) + MIT itself.
+        # Without visual_projection the dims mismatch in self.mit() → RuntimeError
+        # 768 vs 512 (the bug that took down all xclip runs in this lot).
+        self.vision_model      = full.vision_model       # CLIP ViT-B/32
+        self.visual_projection = full.visual_projection  # Linear(768, 512)
+        self.mit               = full.mit                # multiframe integration transformer
         self.prompts_generator = None  # discard
         del full
 
@@ -53,7 +57,9 @@ class XCLIPVideo(nn.Module):
             for p in block.parameters():
                 p.requires_grad = (i >= num_frozen_blocks)
 
-        hidden = self.vision_model.config.hidden_size  # 768
+        # MIT works in projection_dim (512), not vision_hidden (768).
+        # Head reads from MIT output, so it must use projection_dim too.
+        hidden = self.visual_projection.out_features  # 512 for xclip-base
         self.head = nn.Sequential(
             nn.LayerNorm(hidden),
             nn.Dropout(dropout),
@@ -99,9 +105,12 @@ class XCLIPVideo(nn.Module):
         # Reshape (B, T, C, H, W) -> (B*T, C, H, W) for the vision encoder
         pix = x.reshape(B * T, C, H, W)
         vout = self.vision_model(pixel_values=pix)
-        # CLIP gives (B*T, num_patches+1, hidden); take CLS token
-        feats = vout.last_hidden_state[:, 0]              # (B*T, hidden)
-        feats = feats.reshape(B, T, -1)                    # (B, T, hidden)
+        # CLIP gives (B*T, num_patches+1, vision_hidden=768); take CLS token
+        feats = vout.last_hidden_state[:, 0]              # (B*T, 768)
+        # Project to MIT's expected dim (768 -> 512) — without this, MIT crashes
+        # on its position_embedding (size 512) vs feats (size 768).
+        feats = self.visual_projection(feats)             # (B*T, 512)
+        feats = feats.reshape(B, T, -1)                    # (B, T, 512)
         # Multiframe integration transformer (X-CLIP's temporal aggregator)
-        agg = self.mit(feats).last_hidden_state.mean(dim=1)  # (B, hidden)
+        agg = self.mit(feats).last_hidden_state.mean(dim=1)  # (B, 512)
         return self.head(agg)
