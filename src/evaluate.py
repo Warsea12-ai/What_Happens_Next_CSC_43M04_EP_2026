@@ -249,6 +249,26 @@ def main(cfg: DictConfig) -> None:
     print(f"Top-1 accuracy: {top1_accuracy:.4f}")
     print(f"Top-5 accuracy: {top5_accuracy:.4f}")
 
+    # Persist eval to /Data/eval_results/<exp>.json — survives lab reboots
+    # (unlike /tmp/manual_eval_*.txt which gets wiped). Used by
+    # deeplearning/_collect_all_evals.py to aggregate eval val_dir results.
+    try:
+        import json
+        eval_dir = Path("/Data/eval_results")
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        exp_name = checkpoint_path.stem.replace("best_model_", "")
+        eval_dir.joinpath(f"{exp_name}.json").write_text(json.dumps({
+            "experiment":     exp_name,
+            "top1":           float(top1_accuracy),
+            "top5":           float(top5_accuracy),
+            "num_samples":    int(total),
+            "skipped_oom":    int(skipped_oom),
+            "checkpoint":     str(checkpoint_path),
+        }, indent=1), encoding="utf-8")
+        print(f"[eval] persisted -> {eval_dir / (exp_name + '.json')}")
+    except Exception as _e:
+        print(f"[eval] persistent save failed ({_e}) — top1 still in stdout")
+
     # ── Per-class accuracy ────────────────────────────────────────────────────
     per_class_correct = conf_matrix.diagonal()
     per_class_total   = conf_matrix.sum(dim=1)
