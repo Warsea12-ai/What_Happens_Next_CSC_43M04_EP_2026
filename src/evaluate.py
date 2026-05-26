@@ -66,6 +66,7 @@ _TRACK_B_MODELS = {
     "xclip_video",
     "timesformer_hr",
     "siglip2_giant_pairs",
+    "dinov3_pairs",
 }
 
 

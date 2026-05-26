@@ -181,6 +181,7 @@ from models.hiera_huge_wrapper import HieraHuge
 from models.qwen_lora import QwenVLLoRA
 from models.timesformer_hr import TimeSformerHR
 from models.siglip2_giant_pairs import SigLIP2GiantPairs
+from models.dinov3_pairs import DINOv3Pairs
 from models.videomae_temporal_head import VideoMAETemporalHead
 from models.videomae_domain_adapted import VideoMAEDomainAdapted
 from models.videomae_pair_attn import VideoMAEPairAttn
@@ -587,6 +588,16 @@ def build_model(cfg: DictConfig) -> nn.Module:
         return SigLIP2GiantPairs(
             num_classes=int(cfg.model.num_classes),
             backbone=str(cfg.model.get("backbone", "google/siglip2-giant-opt-patch16-384")),
+            backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
+            n_temporal_layers=int(cfg.model.get("n_temporal_layers", 2)),
+            n_heads=int(cfg.model.get("n_heads", 8)),
+            dropout=float(cfg.model.get("dropout", 0.25)),
+            head_hidden=int(cfg.model.get("head_hidden", 2048)),
+        )
+    if name == "dinov3_pairs":
+        return DINOv3Pairs(
+            num_classes=int(cfg.model.num_classes),
+            backbone=str(cfg.model.get("backbone", "facebook/dinov3-vith16plus-pretrain-lvd1689m")),
             backbone_dtype=str(cfg.model.get("backbone_dtype", "bfloat16")),
             n_temporal_layers=int(cfg.model.get("n_temporal_layers", 2)),
             n_heads=int(cfg.model.get("n_heads", 8)),

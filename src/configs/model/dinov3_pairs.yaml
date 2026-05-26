@@ -1,0 +1,8 @@
+name: dinov3_pairs
+num_classes: 33
+backbone: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+backbone_dtype: "bfloat16"
+n_temporal_layers: 2
+n_heads: 8
+dropout: 0.25
+head_hidden: 2048
