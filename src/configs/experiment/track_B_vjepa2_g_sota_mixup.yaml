@@ -1,0 +1,38 @@
+# @package _global_
+# V-JEPA-G + SOTA recipe (cw_ls02_dropout15_repeat_ema 0.6087 sur VideoMAE).
+# Applique le winner sur 1B params pour décorréler les erreurs en ensemble.
+defaults:
+  - override /model: vjepa2_head
+model:
+  backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
+  num_frozen_blocks: 24
+  dropout: 0.15
+  head_hidden: 2048
+  interp_mode: "repeat"
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.80
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.2
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  wandb_watch: false
+  use_ema: true
+  ema_decay: 0.999
+  class_weights: "val_aware"
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: true
+  mixup_alpha: 0.2
