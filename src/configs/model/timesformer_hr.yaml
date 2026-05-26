@@ -1,0 +1,9 @@
+name: timesformer_hr
+num_classes: 33
+backbone: "facebook/timesformer-hr-finetuned-ssv2"
+num_frozen_blocks: 0
+n_temporal_layers: 2
+n_heads: 8
+dropout: 0.25
+head_hidden: 2048
+interp_mode: "aligned"

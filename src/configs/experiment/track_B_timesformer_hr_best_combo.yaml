@@ -1,0 +1,55 @@
+# @package _global_
+# TimeSformer-HR-finetuned-SSv2 + recette best_combo_v2 (winner à 50% top-1).
+#
+# Hypothèse :
+#   - TimeSformer-HR a 430M params (entre VideoMAE-base 86M et V-JEPA2-G 1B).
+#   - SSv2 pretraining = exact domaine "what happens next".
+#   - High-resolution (448×448 vs 224×224) = 4× plus d'info visuelle par frame.
+#   - Divided space-time attention = biais inductif distinct → diversifie l'ensemble.
+#
+# Recette best_combo_v2 (gagnante à 50% sur videomae_cross_attn_pairs) :
+#   Prodigy(lr=1.0) + 0 frozen + head_hidden=2048 + aug off + 20 epochs.
+#
+# Si le score dépasse 50%, on a un nouveau winner.
+defaults:
+  - override /model: timesformer_hr
+
+model:
+  backbone: "facebook/timesformer-hr-finetuned-ssv2"
+  num_frozen_blocks: 0
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+  interp_mode: "aligned"
+
+training:
+  epochs: 20
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.5
+  llrd_factor: 0.8
+  # TimeSformer-HR à 448x448 → activations 4× plus lourdes que 224x224. Réduit
+  # batch_size de 8 → 2, grad_accum 8 → 32 pour eff bs=64. À ré-évaluer après
+  # le 1er epoch si la VRAM passe largement (3090 = 24GB).
+  batch_size: 2
+  grad_accum_steps: 32
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
+
+  early_stop_patience: 8
+  num_workers: 2

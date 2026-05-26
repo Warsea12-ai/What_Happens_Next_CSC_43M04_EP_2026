@@ -64,6 +64,7 @@ _TRACK_B_MODELS = {
     "X3D",
     "mvit_v2_ssv2",
     "xclip_video",
+    "timesformer_hr",
 }
 
 
