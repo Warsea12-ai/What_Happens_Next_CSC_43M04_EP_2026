@@ -1,0 +1,40 @@
+# @package _global_
+# Phase 2 sweep : backbone DINOv3-ViT-L (~300M) au lieu de ViT-H+ (~841M).
+# Hypothèse : ViT-H+ peut sur-représenter pour notre tâche → un backbone plus
+# petit pourrait être moins sujet à l'overfit (early-stop à 13 epochs suggère
+# que le modèle plateaute vite, signe possible de sur-paramétrisation).
+# Si ViT-L atteint ≥ baseline, on a une diversité utile pour l'ensemble final.
+defaults:
+  - override /model: dinov3_pairs
+model:
+  backbone: "facebook/dinov3-vitl16-pretrain-lvd1689m"   # ← varié (baseline=vith16plus)
+  backbone_dtype: "bfloat16"
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.25
+  head_hidden: 2048
+training:
+  epochs: 30
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
+  early_stop_patience: 8
+  num_workers: 2

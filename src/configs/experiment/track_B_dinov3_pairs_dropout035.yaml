@@ -1,0 +1,36 @@
+# @package _global_
+# Phase 2 sweep : dropout=0.35 (entre baseline 0.25 et 0.4).
+defaults:
+  - override /model: dinov3_pairs
+model:
+  backbone: "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+  backbone_dtype: "bfloat16"
+  n_temporal_layers: 2
+  n_heads: 8
+  dropout: 0.35              # ← varié (baseline=0.25)
+  head_hidden: 2048
+training:
+  epochs: 30
+  optimizer: prodigy
+  lr: 1.0
+  backbone_lr_scale: 0.0
+  llrd_factor: 0.0
+  batch_size: 4
+  grad_accum_steps: 16
+  weight_decay: 5.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 3
+  min_lr: 1.0e-7
+  clip_grad_norm: 1.0
+  use_random_resized_crop: false
+  use_augment: false
+  color_prob: 0.0
+  color_strength: 0.0
+  blur_prob: 0.0
+  flip_prob: 0.0
+  use_temporal_map: false
+  equivariant_reverse_prob: 0.0
+  use_mixup: false
+  mixup_alpha: 0.0
+  early_stop_patience: 8
+  num_workers: 2
