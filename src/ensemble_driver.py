@@ -34,23 +34,21 @@ LOGITS_DIR = SRC_DIR / "ensemble_logits"
 
 SSH_OPTS = ["-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=15"]
 
+# Snapshot of all known SSH hosts at 2026-05-27 (45 lab hosts that ran trackB)
+KNOWN_HOSTS: List[str] = [
+    "allier", "apophyse", "baudroie", "belgique", "bentley", "bugatti",
+    "cadillac", "corvette", "cote", "dindon", "doubs", "femur", "fiat",
+    "france", "gironde", "gymnote", "hongrie", "indre", "islande", "jabiru",
+    "jaguar", "lada", "loriol", "malleole", "malte", "manche", "mazda",
+    "monaco", "peugeot", "piranha", "quetzal", "raie", "roumanie", "rover",
+    "royce", "saone", "saumon", "silure", "skoda", "sole", "somme",
+    "vendee", "venturi", "volvo", "xiphoide",
+]
+
 
 def _list_known_hosts() -> List[str]:
-    """Read running_state from the local launcher (best-effort)."""
-    # If running on a remote host, we use a static fallback list from desktop
-    state_path = Path.home() / "running_state.json"
-    if state_path.exists():
-        try:
-            data = json.loads(state_path.read_text(encoding="utf-8"))
-            return sorted({h for h in data.keys() if h != "_updated"})
-        except Exception:
-            pass
-    # Fallback : try ssh-known hosts based on a hardcoded list of common host families
-    # Actually let's read /Data/host_list.txt if present
-    fallback = Path("/Data/host_list.txt")
-    if fallback.exists():
-        return [l.strip() for l in fallback.read_text(encoding="utf-8").splitlines() if l.strip()]
-    return []
+    """Return hardcoded KNOWN_HOSTS snapshot."""
+    return list(KNOWN_HOSTS)
 
 
 def _scan_host_for_evals(host: str) -> List[Tuple[str, float, str]]:
