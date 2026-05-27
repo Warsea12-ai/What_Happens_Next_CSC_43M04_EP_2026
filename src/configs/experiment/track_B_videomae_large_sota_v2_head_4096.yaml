@@ -3,7 +3,7 @@
 defaults:
   - override /model: videomae_cross_attn_pairs
 model:
-  backbone: "MCG-NJU/videomae-large-finetuned-ssv2"
+  backbone: "MCG-NJU/videomae-large-finetuned-kinetics"
   num_frozen_blocks: 0
   n_temporal_layers: 2
   n_heads: 8

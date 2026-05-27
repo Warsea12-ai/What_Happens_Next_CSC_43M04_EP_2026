@@ -11,7 +11,6 @@ model:
   dropout: 0.15
   head_hidden: 4096
   interp_mode: "repeat"
-  image_size: 448
 training:
   epochs: 20
   optimizer: prodigy

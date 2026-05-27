@@ -2,7 +2,7 @@
 # VideoMAE-v2 Giant (1B params, frozen) + SOTA stack.
 # Largest VideoMAE family ; untested with winning levers.
 defaults:
-  - override /model: videomaev2_giant_attn_pool
+  - override /model: videomaev2_giant
 model:
   num_frozen_blocks: 40
   dropout: 0.15

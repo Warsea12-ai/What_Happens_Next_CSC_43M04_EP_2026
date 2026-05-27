@@ -3,6 +3,8 @@
 # Test if the head matters as much as the backbone.
 defaults:
   - override /model: videomae_cross_attn_pairs
+dataset:
+  image_size: 384
 model:
   backbone: "facebook/vjepa2-vitg-fpc64-384-ssv2"
   num_frozen_blocks: 36
