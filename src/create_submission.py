@@ -27,7 +27,9 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
 from dataset.video_dataset import VideoFrameDataset
-from train import build_model
+# Use evaluate.py's dispatch logic so we support both track_A and track_B model
+# classes (videomae_cross_attn_pairs, vjepa2_head, xclip_video, etc.).
+from evaluate import build_model
 from utils import build_transforms, set_seed
 
 
