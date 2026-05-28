@@ -1,0 +1,7 @@
+# @package _global_
+# V-JEPA 2 + LoRA, variant v2 : head_lr=3e-3, lora_scale=0.3 -> lora_lr=0.0009
+defaults:
+  - track_B_vjepa2_lora
+training:
+  lr: 3e-3
+  backbone_lr_scale: 0.3
