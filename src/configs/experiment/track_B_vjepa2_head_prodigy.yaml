@@ -1,0 +1,12 @@
+# @package _global_
+# Baseline : V-JEPA 2 ViT-g (backbone TOTALEMENT gelé) + head MLP, optimizer Prodigy.
+# Pas de tuning manuel du LR — Prodigy auto-adapte (lr=1.0 nominal).
+defaults:
+  - track_B_vjepa2_head
+model:
+  num_frozen_blocks: 40   # tous les blocs gelés (vs 32 du parent) -> head only
+training:
+  lr: 1.0
+  optimizer: prodigy
+  warmup_epochs: 0
+  epochs: 20
