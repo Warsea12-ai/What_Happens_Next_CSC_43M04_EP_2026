@@ -1,0 +1,51 @@
+# @package _global_
+# Qwen2-VL-7B + LoRA, version "balanced LR" : la baseline qwen_lora atteignait
+# seulement 23.91% top-1 parce que `backbone_lr_scale=0.02` plaçait le LoRA à
+# **50× sous la head** (head=3e-4, LoRA=6e-6). À ce ratio, les A/B matrices LoRA
+# ne s'écartaient quasiment pas de leur init zero → la head essayait de classifier
+# sur des features Qwen quasi-figées (équivalent au qwen2_vl_7b frozen à 12.7%).
+#
+# Fix : on monte `backbone_lr_scale` à 0.5 → LoRA à 50% du head LR. C'est dans
+# l'intervalle standard pour PEFT (la littérature PEFT recommande LoRA et head
+# au même ordre de grandeur, écart 1×-5× maximum). Les deux apprennent en parallèle.
+#
+# Changements vs track_B_qwen_lora.yaml :
+#   - backbone_lr_scale : 0.02 → 0.50    (head LR/LoRA LR : 50× → 2×)
+#   - lr                : 3.0e-4 → 5.0e-4  (légère hausse pour donner du gaz)
+#   - epochs            : 50 → 30          (training plafonne tôt avec Qwen 7B)
+#   - early_stop_patience : default 6 → 8
+#   - le reste identique (lora_rank=16, alpha=32, dropout=0.3, head_hidden=768)
+defaults:
+  - override /model: qwen_lora
+
+model:
+  backbone: "Qwen/Qwen2-VL-7B-Instruct"
+  lora_rank: 16
+  lora_alpha: 32.0
+  dropout: 0.3
+  head_hidden: 768
+
+training:
+  epochs: 30
+  optimizer: adamw                      # ← AdamW (Prodigy auto-LR casserait le ratio head/LoRA)
+  lr: 5.0e-4                            # head LR (était 3e-4)
+  backbone_lr_scale: 0.5                # ← LoRA = 2.5e-4 (était 6e-6, soit 50× moins)
+  batch_size: 8
+  grad_accum_steps: 8                   # effective batch = 64
+  weight_decay: 1.0e-4
+  label_smoothing: 0.1
+  warmup_epochs: 5                      # (était 8, moins de runway sur 30 epochs)
+  min_lr: 1.0e-6
+  clip_grad_norm: 1.0
+
+  use_random_resized_crop: false
+  use_augment: true
+  color_prob: 0.3
+  flip_prob: 0.5
+  use_mixup: false
+
+  use_temporal_map: true
+  equivariant_reverse_prob: 0.5
+
+  early_stop_patience: 8
+  num_workers: 2
