@@ -64,9 +64,37 @@ KNOWN_HOSTS: List[str] = sorted(set([
 
 N_CLASSES = 33
 
+# ─── Hardcoded top-N fallback (from 29 evals collected on 2026-05-27) ──────
+# Used when cross-host SSH discovery fails (typical on locked-down lab hosts).
+# Tuples : (experiment_name, val_dir_top1, host_with_checkpoint)
+HARDCODED_TOP_N: List[Tuple[str, float, str]] = [
+    ("track_B_sota_v2_head_4096_epochs_30",            0.6086, "royce"),
+    ("track_B_sota_v2_head_4096_dropout_010",          0.6068, "jaguar"),
+    ("track_B_sota_v2_head_4096_ntemp_3_mixup_04",     0.6065, "indre"),
+    ("track_B_sota_v2_seed59",                         0.6047, "doubs"),
+    ("track_B_sota_v2_head_4096_mixup_02",             0.6043, "doubs"),
+    ("track_B_sota_v2_ntemp_3",                        0.6030, "mazda"),
+    ("track_B_sota_v2_head_4096_seed113",              0.6028, "xiphoide"),
+    ("track_B_sota_v2_head_4096_seed131",              0.6019, "jabiru"),
+    ("track_B_sota_v2_head_4096_seed97",               0.6016, "volvo"),
+    ("track_B_sota_v2_head_4096_ntemp_3",              0.6000, "doubs"),
+    ("track_B_sota_v2_head_8192",                      0.5990, "roumanie"),
+    ("track_B_sota_v2_ntemp_3_seed7",                  0.5979, "xiphoide"),
+    ("track_B_sota_v2_head_4096_seed151",              0.5941, "hongrie"),
+    ("track_B_sota_v2_head_4096_8frames_mixup_04",     0.5929, "lada"),
+    ("track_B_sota_v2_ntemp_3_seed31",                 0.5914, "volvo"),
+    ("track_B_distshift_mixup_04_head_4096",           0.5887, "femur"),
+    ("track_B_sota_v2_head_4096_8frames",              0.5871, "mazda"),
+    ("track_B_sota_v2_ema_9998",                       0.5844, "baudroie"),
+    ("track_B_siglip2_giant_best_combo",               0.4904, "raie"),
+    ("track_B_xclip_super_combo",                      0.4583, "mazda"),
+]
+
+
 # ─── Discovery & SCP ────────────────────────────────────────────────────────
 def discover_top_n(n_top: int = 20) -> List[Tuple[str, float, str]]:
-    """Scan all hosts for /Data/eval_results/*.json, return top-N (exp, top1, host)."""
+    """Scan all hosts for /Data/eval_results/*.json. Falls back to HARDCODED_TOP_N
+    if cross-host SSH discovery yields nothing (typical on locked-down lab hosts)."""
     print(f"[discover] scanning {len(KNOWN_HOSTS)} hosts...")
     found = []
     for h in KNOWN_HOSTS:
@@ -95,7 +123,11 @@ def discover_top_n(n_top: int = 20) -> List[Tuple[str, float, str]]:
         if exp not in by_exp or t1 > by_exp[exp][0]:
             by_exp[exp] = (t1, h)
     ranked = sorted(((e, t, h) for e, (t, h) in by_exp.items()), key=lambda x: -x[1])
-    print(f"[discover] found {len(ranked)} unique evaluated experiments")
+    print(f"[discover] found {len(ranked)} via SSH")
+    # Fallback : use hardcoded list when SSH discovery yields too few results
+    if len(ranked) < 5:
+        print(f"[discover] SSH yielded {len(ranked)} — using HARDCODED_TOP_N fallback")
+        ranked = HARDCODED_TOP_N.copy()
     return ranked[:n_top]
 
 
