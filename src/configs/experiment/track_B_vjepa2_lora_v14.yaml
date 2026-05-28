@@ -1,0 +1,12 @@
+# @package _global_
+# Aggressive : bigger LoRA, more trainable, bigger head, lower dropout
+defaults:
+  - track_B_vjepa2_lora
+model:
+  lora_rank: 32
+  num_frozen_blocks: 24
+  head_hidden: 4096
+  dropout: 0.15
+training:
+  lr: 5e-4
+  backbone_lr_scale: 0.5

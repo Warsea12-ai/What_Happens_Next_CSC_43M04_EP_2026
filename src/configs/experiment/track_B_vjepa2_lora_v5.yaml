@@ -1,0 +1,6 @@
+# @package _global_
+# Sweep LoRA capacity : rank=8 (low)
+defaults:
+  - track_B_vjepa2_lora
+model:
+  lora_rank: 8

@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+  - track_B_vjepa2_lora
+model:
+  num_frozen_blocks: 24

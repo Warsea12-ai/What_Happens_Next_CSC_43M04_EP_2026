@@ -1,0 +1,6 @@
+# @package _global_
+defaults:
+  - track_B_vjepa2_lora
+model:
+  backbone: "facebook/vjepa2-vitl-fpc16-256-ssv2"
+  num_frozen_blocks: 16
