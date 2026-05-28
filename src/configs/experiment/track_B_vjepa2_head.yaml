@@ -17,7 +17,7 @@
 # - Pic GPU : 8.67 GB (raie a 24 GB → marge confortable)
 # - Forme feature : (4, 1408) ✓ backward OK ✓
 #
-# Cache : /Data/vianney.gauthier/hub (partagé NFS, accessible depuis tous les hôtes)
+# Cache : /Data/.hf_cache/hub (partagé NFS, accessible depuis tous les hôtes)
 # Hôte recommandé : raie (24 GB GPU libre)
 defaults:
   - override /model: vjepa2_head

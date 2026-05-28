@@ -119,7 +119,7 @@ class VJEPA2Llama3VLM(nn.Module):
         num_classes:           int   = 33,
         vjepa_backbone:        str   = _DEFAULT_VJEPA_CKPT,
         llama_backbone:        str   = _DEFAULT_LLAMA_CKPT,
-        cache_dir:             str   = "/Data/vianney.gauthier/hub",
+        cache_dir:             str   = "/Data/.hf_cache/hub",
         num_frozen_vjepa_blocks: int = 40,    # 40/40 = fully frozen V-JEPA
         vision_token_pool:     str   = "spatial2x",
         lora_rank:             int   = 16,

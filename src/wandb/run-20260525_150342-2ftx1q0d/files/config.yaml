@@ -1,0 +1,117 @@
+_wandb:
+    value:
+        cli_version: 0.27.0
+        e:
+            7lv23teaahpkj5sunfe3eti4avpez7vs:
+                args:
+                    - experiment=track_B_sweep_best_combo_v2_interp_centered_ga4_cwce
+                    - training.checkpoint_path=/Data/What_Happens_Next_CSC_43M04_EP_2026/src/best_model_track_B_sweep_best_combo_v2_interp_centered_ga4_cwce.pt
+                codePath: src/evaluate.py
+                codePathLocal: evaluate.py
+                cpu_count: 20
+                cpu_count_logical: 28
+                cudaVersion: "13.2"
+                disk:
+                    /:
+                        total: "4227858432"
+                        used: "1277149184"
+                email: alfred.ruscher@gmail.com
+                executable: /Data/.venv/bin/python
+                git:
+                    commit: aceb7a55c9722f1807276d8526904a66ac87152a
+                    remote: https://github.com/Warsea12-ai/What_Happens_Next_CSC_43M04_EP_2026.git
+                gpu: NVIDIA RTX 4000 Ada Generation
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 6144
+                      memoryTotal: "21469593600"
+                      name: NVIDIA RTX 4000 Ada Generation
+                      uuid: GPU-94d8a826-939b-bed6-9a4a-23a4dd26def2
+                host: saone.polytechnique.fr
+                memory:
+                    total: "66822721536"
+                os: Linux-5.14.0-611.55.1.el9_7.x86_64-x86_64-with-glibc2.34
+                program: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/evaluate.py
+                python: CPython 3.12.13
+                root: /Data/What_Happens_Next_CSC_43M04_EP_2026/src
+                startedAt: "2026-05-25T13:03:42.271081Z"
+                writerId: 7lv23teaahpkj5sunfe3eti4avpez7vs
+        m: []
+        python_version: 3.12.13
+        t:
+            "1":
+                - 1
+                - 11
+                - 29
+                - 41
+                - 49
+                - 50
+                - 71
+                - 98
+            "2":
+                - 1
+                - 11
+                - 29
+                - 41
+                - 49
+                - 50
+                - 71
+                - 98
+            "3":
+                - 2
+                - 13
+                - 16
+                - 62
+            "4": 3.12.13
+            "5": 0.27.0
+            "6": 5.8.1
+            "10":
+                - 20
+            "12": 0.27.0
+            "13": linux-x86_64
+        visualize:
+            eval/confusion_matrix:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion Matrix Curve
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: eval/confusion_matrix_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+checkpoint_path:
+    value: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/best_model_track_B_sweep_best_combo_v2_interp_centered_ga4_cwce.pt
+num_classes:
+    value: 33
+num_frames:
+    value: 4
+num_samples:
+    value: 6745
+use_multi_crop:
+    value: false
+use_tta:
+    value: false
+val_dir:
+    value: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/val

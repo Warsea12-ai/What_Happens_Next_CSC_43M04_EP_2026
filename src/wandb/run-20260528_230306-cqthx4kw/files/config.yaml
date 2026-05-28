@@ -1,0 +1,189 @@
+_wandb:
+    value:
+        cli_version: 0.27.0
+        e:
+            44ccf92mmsy1l78c6fidwrrr6ux17sxl:
+                args:
+                    - experiment=track_B_gap_combo_frozen_8_mixup_06_ls_04
+                    - training.epochs=2
+                codePath: src/train_trackB.py
+                codePathLocal: train_trackB.py
+                cpu_count: 20
+                cpu_count_logical: 28
+                cudaVersion: "13.2"
+                disk:
+                    /:
+                        total: "4227858432"
+                        used: "1252425728"
+                email: alfred.ruscher@gmail.com
+                executable: /Data/.venv/bin/python
+                git:
+                    commit: 8792852c30c53702782f82533b70ceb009f72b6f
+                    remote: https://github.com/Warsea12-ai/What_Happens_Next_CSC_43M04_EP_2026.git
+                gpu: NVIDIA RTX 4000 Ada Generation
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 6144
+                      memoryTotal: "21469593600"
+                      name: NVIDIA RTX 4000 Ada Generation
+                      uuid: GPU-94d8a826-939b-bed6-9a4a-23a4dd26def2
+                host: saone.polytechnique.fr
+                memory:
+                    total: "66823163904"
+                os: Linux-5.14.0-687.5.3.el9_8.x86_64-x86_64-with-glibc2.34
+                program: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/train_trackB.py
+                python: CPython 3.12.13
+                root: /Data/What_Happens_Next_CSC_43M04_EP_2026/src
+                startedAt: "2026-05-28T21:03:06.794852Z"
+                writerId: 44ccf92mmsy1l78c6fidwrrr6ux17sxl
+        m: []
+        python_version: 3.12.13
+        t:
+            "1":
+                - 1
+                - 11
+                - 29
+                - 41
+                - 49
+                - 50
+                - 63
+                - 71
+                - 98
+            "2":
+                - 1
+                - 11
+                - 29
+                - 41
+                - 49
+                - 50
+                - 63
+                - 71
+                - 98
+            "3":
+                - 1
+                - 2
+                - 13
+                - 16
+                - 61
+                - 62
+            "4": 3.12.13
+            "5": 0.27.0
+            "6": 5.8.1
+            "12": 0.27.0
+            "13": linux-x86_64
+        visualize:
+            val/confusion_matrix:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion Matrix Curve
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: val/confusion_matrix_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+dataset:
+    value:
+        flip_forbidden_labels:
+            - 18
+            - 19
+        max_samples: null
+        num_frames: 4
+        seed: 42
+        submission_output: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/submission.csv
+        temporal_reverse_map:
+            "0": 10
+            "1": 31
+            "3": 32
+            "6": 7
+            "7": 6
+            "8": 9
+            "9": 8
+            "10": 0
+            "22": 28
+            "28": 22
+            "30": 30
+            "31": 1
+            "32": 3
+        test_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/test
+        train_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/train
+        val_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/val
+        val_ratio: 0.2
+model:
+    value:
+        backbone: MCG-NJU/videomae-base-finetuned-ssv2
+        dropout: 0.15
+        head_hidden: 4096
+        interp_mode: repeat
+        n_heads: 8
+        n_temporal_layers: 2
+        name: videomae_cross_attn_pairs
+        num_classes: 33
+        num_frozen_blocks: 8
+num_classes:
+    value: 33
+training:
+    value:
+        backbone_lr_scale: 0.5
+        batch_size: 8
+        blur_prob: 0
+        checkpoint_path: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/best_model_track_B_gap_combo_frozen_8_mixup_06_ls_04.pt
+        class_weights: val_aware
+        clip_grad_norm: 1
+        color_prob: 0
+        color_strength: 0
+        device: cuda
+        ema_decay: 0.999
+        epochs: 2
+        equivariant_reverse_prob: 0
+        flip_prob: 0
+        grad_accum_steps: 4
+        label_smoothing: 0.4
+        learned_rot_degrees: 10
+        learned_rot_pad_size: 28
+        llrd_factor: 0.8
+        lr: 1
+        min_lr: 1e-07
+        mixup_alpha: 0.6
+        motion_blur_prob: 0.15
+        num_workers: 4
+        optimizer: prodigy
+        padding_batch_size: 16
+        padding_context: 8
+        padding_epochs: 5
+        padding_hidden: 64
+        padding_lr: 0.001
+        padding_max_samples: 2000
+        padding_weights_path: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/padding_module.pt
+        pixelation_prob: 0.15
+        use_augment: false
+        use_ema: true
+        use_learned_rotation: false
+        use_mixup: true
+        use_random_resized_crop: false
+        use_temporal_map: false
+        wandb_watch: true
+        wandb_watch_freq: 500
+        warmup_epochs: 1
+        weight_decay: 0.0005

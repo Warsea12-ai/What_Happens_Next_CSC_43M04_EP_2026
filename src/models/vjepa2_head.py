@@ -38,7 +38,7 @@ Output  : (B, 33)
 No normalisation conversion needed: V-JEPA 2 uses ImageNet normalisation
 (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), same as our pipeline.
 
-Cache: model lives at /Data/vianney.gauthier/hub — readable by all hosts.
+Cache: model lives at /Data/.hf_cache/hub — readable by all hosts.
 """
 from __future__ import annotations
 

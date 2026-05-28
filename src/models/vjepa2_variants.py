@@ -62,7 +62,7 @@ class VJEPA2Variant(nn.Module):
         self,
         num_classes:       int   = 33,
         backbone:          str   = "facebook/vjepa2-vitg-fpc64-384-ssv2",
-        cache_dir:         str   = "/Data/vianney.gauthier/hub",
+        cache_dir:         str   = "/Data/.hf_cache/hub",
         num_frozen_blocks: int   = 32,
         dropout:           float = 0.25,
         head_hidden:       int   = 2048,

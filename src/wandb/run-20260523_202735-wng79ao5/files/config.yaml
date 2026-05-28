@@ -1,0 +1,179 @@
+_wandb:
+    value:
+        cli_version: 0.27.0
+        e:
+            yhvgvsft6epbqhufii7ml7klhajbr5yy:
+                args:
+                    - experiment=track_B_sweep_aug_no_rrc
+                codePath: src/train_trackB.py
+                codePathLocal: train_trackB.py
+                cpu_count: 20
+                cpu_count_logical: 28
+                cudaVersion: "13.2"
+                disk:
+                    /:
+                        total: "4227858432"
+                        used: "1277149184"
+                email: alfred.ruscher@gmail.com
+                executable: /Data/.venv/bin/python
+                git:
+                    commit: f501b5ea010fc4168b0204accf5269fd5dc16e7f
+                    remote: https://github.com/Warsea12-ai/What_Happens_Next_CSC_43M04_EP_2026.git
+                gpu: NVIDIA RTX 4000 Ada Generation
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 6144
+                      memoryTotal: "21469593600"
+                      name: NVIDIA RTX 4000 Ada Generation
+                      uuid: GPU-94d8a826-939b-bed6-9a4a-23a4dd26def2
+                host: saone.polytechnique.fr
+                memory:
+                    total: "66822721536"
+                os: Linux-5.14.0-611.55.1.el9_7.x86_64-x86_64-with-glibc2.34
+                program: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/train_trackB.py
+                python: CPython 3.12.13
+                root: /Data/What_Happens_Next_CSC_43M04_EP_2026/src
+                startedAt: "2026-05-23T18:27:35.890695Z"
+                writerId: yhvgvsft6epbqhufii7ml7klhajbr5yy
+        m: []
+        python_version: 3.12.13
+        t:
+            "1":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 50
+                - 71
+                - 98
+            "2":
+                - 1
+                - 11
+                - 41
+                - 49
+                - 50
+                - 71
+                - 98
+            "3":
+                - 1
+                - 2
+                - 13
+                - 16
+                - 61
+                - 62
+            "4": 3.12.13
+            "5": 0.27.0
+            "6": 5.8.1
+            "12": 0.27.0
+            "13": linux-x86_64
+        visualize:
+            val/confusion_matrix:
+                panel_config:
+                    fieldSettings:
+                        Actual: Actual
+                        Predicted: Predicted
+                        nPredictions: nPredictions
+                    panelDefId: wandb/confusion_matrix/v1
+                    stringSettings:
+                        title: Confusion Matrix Curve
+                    transform:
+                        name: tableWithLeafColNames
+                    userQuery:
+                        queryFields:
+                            - args:
+                                - name: runSets
+                                  value: ${runSets}
+                              fields:
+                                - fields: []
+                                  name: id
+                                - fields: []
+                                  name: name
+                                - fields: []
+                                  name: _defaultColorIndex
+                                - args:
+                                    - name: tableKey
+                                      value: val/confusion_matrix_table
+                                  fields: []
+                                  name: summaryTable
+                              name: runSets
+                panel_type: Vega2
+dataset:
+    value:
+        flip_forbidden_labels:
+            - 18
+            - 19
+        max_samples: null
+        num_frames: 4
+        seed: 42
+        submission_output: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/submission.csv
+        temporal_reverse_map:
+            "0": 10
+            "1": 31
+            "3": 32
+            "6": 7
+            "7": 6
+            "8": 9
+            "9": 8
+            "10": 0
+            "22": 28
+            "28": 22
+            "30": 30
+            "31": 1
+            "32": 3
+        test_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/test
+        train_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/train
+        val_dir: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/processed_data/val2/val
+        val_ratio: 0.2
+model:
+    value:
+        backbone: MCG-NJU/videomae-base-finetuned-ssv2
+        dropout: 0.25
+        head_hidden: 1024
+        n_heads: 8
+        n_temporal_layers: 2
+        name: videomae_cross_attn_pairs
+        num_classes: 33
+        num_frozen_blocks: 2
+num_classes:
+    value: 33
+training:
+    value:
+        backbone_lr_scale: 0.05
+        batch_size: 8
+        blur_prob: 0.1
+        checkpoint_path: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/best_model_track_B_sweep_aug_no_rrc.pt
+        clip_grad_norm: 1
+        color_prob: 0.8
+        color_strength: 0.35
+        device: cuda
+        epochs: 20
+        equivariant_reverse_prob: 0.6
+        flip_prob: 0.5
+        grad_accum_steps: 8
+        label_smoothing: 0.1
+        learned_rot_degrees: 10
+        learned_rot_pad_size: 28
+        llrd_factor: 0.8
+        lr: 0.0001
+        min_lr: 1e-07
+        mixup_alpha: 0.4
+        motion_blur_prob: 0.15
+        num_workers: 4
+        padding_batch_size: 16
+        padding_context: 8
+        padding_epochs: 5
+        padding_hidden: 64
+        padding_lr: 0.001
+        padding_max_samples: 2000
+        padding_weights_path: /Data/What_Happens_Next_CSC_43M04_EP_2026/src/padding_module.pt
+        pixelation_prob: 0.15
+        use_augment: true
+        use_learned_rotation: false
+        use_mixup: true
+        use_random_resized_crop: false
+        use_temporal_map: true
+        wandb_watch: true
+        wandb_watch_freq: 500
+        warmup_epochs: 3
+        weight_decay: 0.0005
