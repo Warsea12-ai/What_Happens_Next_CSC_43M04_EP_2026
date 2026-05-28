@@ -36,8 +36,6 @@ class QwenVLLoRA(nn.Module):
         head_hidden: int = 768,
     ) -> None:
         super().__init__()
-        if lora_target_modules is None:
-            lora_target_modules = ["q_proj", "v_proj"]
 
         print(f"Loading {backbone} to CPU…")
         if "2.5" in backbone:
@@ -55,8 +53,23 @@ class QwenVLLoRA(nn.Module):
         for p in self.visual.parameters():
             p.requires_grad = False
 
-        # Apply LoRA adapters to attention projections
-        apply_lora(self.visual, lora_target_modules, rank=lora_rank, alpha=lora_alpha)
+        # Defensive LoRA injection: Qwen2-VL's visual encoder uses combined `qkv`
+        # projections (BEiT-style), but earlier hardcoded ["q_proj", "v_proj"] matched
+        # nothing → 0 adapters → backbone fully frozen. Try qkv first, then OPT-style
+        # q_proj/v_proj, then BERT-style query/value. Stop at first match.
+        if lora_target_modules is not None:
+            candidates = [lora_target_modules]
+        else:
+            candidates = [["qkv"], ["q_proj", "v_proj"], ["query", "value"]]
+        for targets in candidates:
+            n_lora = apply_lora(self.visual, targets, rank=lora_rank, alpha=lora_alpha)
+            if n_lora > 0:
+                lora_target_modules = targets
+                break
+        else:
+            raise RuntimeError(
+                f"QwenVLLoRA: no LoRA target matched on {backbone}. Tried {candidates}."
+            )
 
         vcfg = self.visual.config
         self.patch_size          = vcfg.patch_size
