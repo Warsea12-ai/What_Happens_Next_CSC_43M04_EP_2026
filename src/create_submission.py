@@ -177,7 +177,10 @@ def main(cfg: DictConfig) -> None:
     # Normalization must exactly match what was used during training.
     # Checkpoints from train_trackA/B.py store use_imagenet_norm explicitly.
     # Older checkpoints fall back to the pretrained flag (original heuristic).
-    use_imagenet_norm = bool(ckpt.get("use_imagenet_norm", ckpt.get("pretrained", cfg.model.pretrained)))
+    # Safe access : Track B videomae_cross_attn_pairs config doesn't carry a top-level
+    # "pretrained" flag (the HF backbone is always pretrained), so default True.
+    _cfg_pretrained = OmegaConf.to_container(cfg.model, resolve=False).get("pretrained", True) if hasattr(cfg, "model") else True
+    use_imagenet_norm = bool(ckpt.get("use_imagenet_norm", ckpt.get("pretrained", _cfg_pretrained)))
     eval_transform = build_transforms(is_training=False, use_imagenet_norm=use_imagenet_norm)
 
     test_root = Path(cfg.dataset.test_dir).resolve()
